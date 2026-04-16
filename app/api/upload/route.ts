@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       data: {
         title,
         description,
-        tags: tagsString || '', // SQLite 使用字符串，PostgreSQL 会在写入时自动转换
+        tags: tagsString ? tagsString.split(',').map((t) => t.trim()) : [], // 将逗号分隔的字符串转换为数组
         fileName: uploadResult.fileName,
         fileSize: uploadResult.fileSize,
         fileType: file.name.split('.').pop() || '',
