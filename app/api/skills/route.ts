@@ -3,9 +3,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { getPublicUser } from '@/lib/public-user';
 import { successResponse, errorResponse, calculatePagination } from '@/lib/utils';
 import {
   isSqliteProvider,
@@ -119,14 +118,7 @@ export async function GET(request: NextRequest) {
 // ===========================================
 export async function POST(request: NextRequest) {
   try {
-    // 验证登录
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        errorResponse('请先登录', 'UNAUTHORIZED'),
-        { status: 401 }
-      );
-    }
+    const publicUser = await getPublicUser();
 
     // 解析请求体
     const body = await request.json();
@@ -150,7 +142,7 @@ export async function POST(request: NextRequest) {
         fileName,
         fileSize,
         fileType,
-        authorId: session.user.id,
+        authorId: publicUser.id,
         status: 'active',
       },
       include: {

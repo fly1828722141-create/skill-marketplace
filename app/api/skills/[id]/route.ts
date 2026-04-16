@@ -3,8 +3,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { successResponse, errorResponse } from '@/lib/utils';
 import { normalizeTagsFromDb, parseTagsInput, toPrismaTagsValue } from '@/lib/tags';
@@ -84,15 +82,6 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    // 验证登录
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        errorResponse('请先登录', 'UNAUTHORIZED'),
-        { status: 401 }
-      );
-    }
-
     const skillId = params.id;
     const body = await request.json();
     const { title, description, tags } = body;
@@ -106,14 +95,6 @@ export async function PUT(
       return NextResponse.json(
         errorResponse('技能包不存在', 'SKILL_NOT_FOUND'),
         { status: 404 }
-      );
-    }
-
-    // 验证权限（只有作者可以修改）
-    if (existingSkill.authorId !== session.user.id) {
-      return NextResponse.json(
-        errorResponse('无权限修改此技能包', 'FORBIDDEN'),
-        { status: 403 }
       );
     }
 
@@ -167,15 +148,6 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    // 验证登录
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        errorResponse('请先登录', 'UNAUTHORIZED'),
-        { status: 401 }
-      );
-    }
-
     const skillId = params.id;
 
     // 检查技能包是否存在
@@ -187,14 +159,6 @@ export async function DELETE(
       return NextResponse.json(
         errorResponse('技能包不存在', 'SKILL_NOT_FOUND'),
         { status: 404 }
-      );
-    }
-
-    // 验证权限（只有作者可以删除）
-    if (existingSkill.authorId !== session.user.id) {
-      return NextResponse.json(
-        errorResponse('无权限删除此技能包', 'FORBIDDEN'),
-        { status: 403 }
       );
     }
 

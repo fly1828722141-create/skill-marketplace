@@ -9,14 +9,12 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { useSession } from 'next-auth/react';
 import { message } from 'antd';
-import { Skill, User } from '@/types';
-import { formatDateTime, formatFileSize, formatTime, formatNumber } from '@/lib/utils';
+import { Skill } from '@/types';
+import { formatDateTime, formatFileSize, formatNumber } from '@/lib/utils';
 
 export default function SkillDetailPage() {
   const params = useParams();
-  const { data: session } = useSession();
   const [skill, setSkill] = useState<Skill | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
@@ -52,11 +50,6 @@ export default function SkillDetailPage() {
   // 下载处理
   // ===========================================
   async function handleDownload() {
-    if (!session) {
-      message.warning('请先登录后下载');
-      return;
-    }
-
     setDownloading(true);
 
     try {
@@ -105,8 +98,6 @@ export default function SkillDetailPage() {
       </div>
     );
   }
-
-  const isAuthor = session?.user?.id === skill.authorId;
 
   return (
     <div className="skill-detail-page">
@@ -222,18 +213,6 @@ export default function SkillDetailPage() {
             )}
           </div>
 
-          {/* 作者操作 */}
-          {isAuthor && (
-            <div className="author-actions">
-              <h3>⚙️ 管理</h3>
-              <button className="btn btn-secondary btn-block">
-                ✏️ 编辑
-              </button>
-              <button className="btn btn-secondary btn-block">
-                🗑️ 删除
-              </button>
-            </div>
-          )}
         </aside>
       </div>
 

@@ -8,12 +8,10 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import { message } from 'antd';
 
 export default function UploadPage() {
   const router = useRouter();
-  const { data: session, status } = useSession();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
@@ -21,23 +19,6 @@ export default function UploadPage() {
     tags: '',
   });
   const [file, setFile] = useState<File | null>(null);
-
-  // ===========================================
-  // 检查登录状态
-  // ===========================================
-  if (status === 'unauthenticated') {
-    return (
-      <div className="upload-page">
-        <div className="auth-required">
-          <h2>⚠️ 请先登录</h2>
-          <p>登录后才能上传技能包</p>
-          <button onClick={() => router.push('/login')} className="btn btn-primary">
-            去登录
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   // ===========================================
   // 表单提交处理
@@ -327,22 +308,6 @@ export default function UploadPage() {
           min-width: 120px;
         }
 
-        .auth-required {
-          text-align: center;
-          padding: var(--spacing-xl);
-          background: white;
-          border-radius: var(--radius-md);
-          box-shadow: var(--shadow-md);
-        }
-
-        .auth-required h2 {
-          margin-bottom: var(--spacing-sm);
-        }
-
-        .auth-required p {
-          color: var(--text-secondary);
-          margin-bottom: var(--spacing-md);
-        }
       `}</style>
     </div>
   );

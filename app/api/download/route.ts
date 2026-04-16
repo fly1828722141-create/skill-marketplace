@@ -5,8 +5,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { successResponse, errorResponse } from '@/lib/utils';
 
@@ -18,15 +16,6 @@ export const revalidate = 0;
 // ===========================================
 export async function POST(request: NextRequest) {
   try {
-    // 验证登录
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        errorResponse('请先登录', 'UNAUTHORIZED'),
-        { status: 401 }
-      );
-    }
-
     // 解析请求体
     const body = await request.json();
     const { skillId } = body;
@@ -50,35 +39,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 检查是否已下载过（避免重复计数）
-    const existingDownload = await prisma.download.findUnique({
-      where: {
-        userId_skillId: {
-          userId: session.user.id,
-          skillId: skillId,
+    // 游客模式下，每次点击都计一次下载
+    await prisma.skill.update({
+      where: { id: skillId },
+      data: {
+        downloadCount: {
+          increment: 1,
         },
       },
     });
-
-    let downloadCountIncremented = false;
-
-    if (!existingDownload) {
-      // 创建下载记录
-      await prisma.download.create({
-        data: {
-          userId: session.user.id,
-          skillId: skillId,
-        },
-      });
-
-      // 增加下载次数
-      await prisma.skill.update({
-        where: { id: skillId },
-        data: { downloadCount: skill.downloadCount + 1 },
-      });
-
-      downloadCountIncremented = true;
-    }
 
     // 获取临时下载链接（有效期 1 小时）
     const { generateTempUrl } = await import('@/lib/oss');
@@ -89,8 +58,8 @@ export async function POST(request: NextRequest) {
         downloadUrl,
         fileName: skill.fileName,
         fileSize: skill.fileSize,
-        downloadedBefore: !!existingDownload,
-        downloadCountIncremented,
+        downloadedBefore: false,
+        downloadCountIncremented: true,
       })
     );
   } catch (error: any) {

@@ -5,10 +5,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { uploadFile, validateFile } from '@/lib/oss';
 import prisma from '@/lib/prisma';
+import { getPublicUser } from '@/lib/public-user';
 import { successResponse, errorResponse, sanitizeFileName } from '@/lib/utils';
 import { normalizeTagsFromDb, parseTagsInput, toPrismaTagsValue } from '@/lib/tags';
 
@@ -17,14 +16,7 @@ import { normalizeTagsFromDb, parseTagsInput, toPrismaTagsValue } from '@/lib/ta
 // ===========================================
 export async function POST(request: NextRequest) {
   try {
-    // 验证登录
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        errorResponse('请先登录', 'UNAUTHORIZED'),
-        { status: 401 }
-      );
-    }
+    const publicUser = await getPublicUser();
 
     // 解析 FormData
     const formData = await request.formData();
@@ -72,7 +64,7 @@ export async function POST(request: NextRequest) {
         fileName: uploadResult.fileName,
         fileSize: uploadResult.fileSize,
         fileType: file.name.split('.').pop() || '',
-        authorId: session.user.id,
+        authorId: publicUser.id,
         status: 'active',
       },
       include: {
