@@ -398,6 +398,39 @@ button {
   padding: 0 40px 80px;
 }
 
+.featured-upload-card {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.95) 0%, rgba(240, 248, 255, 0.9) 100%);
+  border: 1px solid rgba(0, 122, 255, 0.16);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 28px 30px;
+  display: grid;
+  gap: 12px;
+}
+
+.featured-upload-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.featured-upload-size {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.featured-upload-card p {
+  color: var(--text-secondary);
+  font-size: 15px;
+}
+
+.featured-download-btn {
+  width: fit-content;
+  text-decoration: none;
+}
+
 .section-header {
   display: flex;
   align-items: center;
@@ -1023,6 +1056,10 @@ button {
   .content-section {
     padding-left: 20px;
     padding-right: 20px;
+  }
+
+  .featured-upload-card {
+    padding: 20px;
   }
 
   .skills-grid {
