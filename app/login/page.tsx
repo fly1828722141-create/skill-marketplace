@@ -112,7 +112,7 @@ export default function LoginPage() {
           <div className="login-footer">
             <p>使用阿里内部账号登录，即可上传和下载技能包</p>
             <p className="help-text">
-              遇到问题？请联系：尚凡（龚艳）- 飞猪 - 大住宿 - 经营效能
+              遇到问题？请联系：fly
             </p>
           </div>
         </div>

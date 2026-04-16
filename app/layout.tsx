@@ -5,12 +5,10 @@
  */
 
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import Link from 'next/link';
 import { AntdRegistry } from '@ant-design/nextjs-registry';
 import SessionProvider from './api/auth/session/provider';
 import './globals.css';
-
-const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Skill Marketplace - 技能分享平台',
@@ -25,36 +23,67 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN">
-      <body className={inter.className}>
+      <body>
         <AntdRegistry>
           <SessionProvider>
+            <div className="bg-decoration" aria-hidden="true">
+              <div className="bg-blob bg-blob-1" />
+              <div className="bg-blob bg-blob-2" />
+              <div className="bg-blob bg-blob-3" />
+            </div>
+
             <div className="app-container">
-              {/* 导航栏 */}
-              <header className="app-header">
-                <div className="header-content">
-                  <div className="logo">
-                    <h1>Skill Marketplace</h1>
-                  </div>
-                  <nav className="nav-menu">
-                    <a href="/">首页</a>
-                    <a href="/skills">技能库</a>
-                    <a href="/upload">上传</a>
+              <header className="navbar">
+                <div className="navbar-content">
+                  <Link href="/" className="logo">
+                    <div className="logo-icon" aria-hidden="true">
+                      <svg viewBox="0 0 40 40" className="logo-icon-svg">
+                        <rect x="8" y="8" width="24" height="24" rx="8" />
+                        <path d="M13 21L19 15L27 23" />
+                        <path d="M22 23H27V18" />
+                      </svg>
+                    </div>
+                    <span className="logo-text">有求必应屋</span>
+                  </Link>
+                  <nav className="nav-links">
+                    <Link href="/" className="nav-link active">
+                      首页
+                    </Link>
+                    <Link href="/skills" className="nav-link">
+                      分类
+                    </Link>
+                    <Link href="/#leaderboard" className="nav-link">
+                      排行榜
+                    </Link>
+                    <Link href="/skills" className="nav-link">
+                      我的
+                    </Link>
                   </nav>
-                  <div className="user-actions">
-                    {/* 登录状态由客户端组件管理 */}
-                  </div>
+                  <Link href="/upload" className="upload-btn">
+                    + 上传 Skill
+                  </Link>
                 </div>
               </header>
 
-              {/* 主内容区 */}
-              <main className="app-main">{children}</main>
+              <main className="main-content">{children}</main>
 
-              {/* Footer */}
-              <footer className="app-footer">
-                <div className="footer-content">
-                  <p>© 2026 Skill Marketplace - 阿里巴巴集团内部使用</p>
-                  <p>开发者：尚凡（龚艳） | 部门：飞猪 - 大住宿 - 业务运营中心 - 经营效能</p>
+              <footer className="footer">
+                <div className="footer-links">
+                  <Link href="/skills" className="footer-link">
+                    关于我们
+                  </Link>
+                  <Link href="/skills" className="footer-link">
+                    使用指南
+                  </Link>
+                  <Link href="/skills" className="footer-link">
+                    开发者文档
+                  </Link>
+                  <Link href="/upload" className="footer-link">
+                    意见反馈
+                  </Link>
                 </div>
+                <p>© 2026 有求必应屋 - Skill 分享平台</p>
+                <p>开发者：fly</p>
               </footer>
             </div>
           </SessionProvider>
