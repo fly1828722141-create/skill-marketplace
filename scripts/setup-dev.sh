@@ -23,7 +23,7 @@ npx prisma db push --schema=./prisma/schema.dev.prisma
 
 # 4. 运行种子脚本（插入测试数据）
 echo "🌱 插入测试数据..."
-npx ts-node --compiler-options '{"module":"CommonJS"}' prisma/seed.ts
+npx tsx prisma/seed.dev.ts
 
 # 5. 完成
 echo ""

@@ -7,6 +7,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { successResponse, errorResponse } from '@/lib/utils';
+import { normalizeTagsFromDb, parseTagsInput, toPrismaTagsValue } from '@/lib/tags';
 
 // ===========================================
 // GET /api/skills/[id] - 获取技能包详情
@@ -60,7 +61,12 @@ export async function GET(
       data: { viewCount: skill.viewCount + 1 },
     });
 
-    return NextResponse.json(successResponse(skill));
+    const normalizedSkill = {
+      ...skill,
+      tags: normalizeTagsFromDb(skill.tags),
+    };
+
+    return NextResponse.json(successResponse(normalizedSkill));
   } catch (error: any) {
     console.error('获取技能包详情失败:', error);
     return NextResponse.json(
@@ -111,13 +117,18 @@ export async function PUT(
       );
     }
 
+    const normalizedTags =
+      tags !== undefined
+        ? parseTagsInput(tags)
+        : normalizeTagsFromDb(existingSkill.tags);
+
     // 更新技能包
     const updatedSkill = await prisma.skill.update({
       where: { id: skillId },
       data: {
         title: title || existingSkill.title,
         description: description || existingSkill.description,
-        tags: tags !== undefined ? tags : existingSkill.tags,
+        tags: toPrismaTagsValue(normalizedTags, prisma) as any,
       },
       include: {
         author: {
@@ -131,8 +142,13 @@ export async function PUT(
       },
     });
 
+    const normalizedSkill = {
+      ...updatedSkill,
+      tags: normalizeTagsFromDb(updatedSkill.tags),
+    };
+
     return NextResponse.json(
-      successResponse(updatedSkill, '技能包更新成功')
+      successResponse(normalizedSkill, '技能包更新成功')
     );
   } catch (error: any) {
     console.error('更新技能包失败:', error);

@@ -6,6 +6,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import { parseTagsInput, toPrismaTagsValue } from '../lib/tags';
 
 const prisma = new PrismaClient();
 
@@ -60,7 +61,7 @@ async function main() {
   // ===========================================
   console.log('📦 创建测试技能包...');
 
-  // 注意：SQLite 不支持数组，tags 使用逗号分隔的字符串
+  // 输入统一用逗号分隔字符串，入库时会按数据库类型自动转换
   const skills = [
     {
       title: 'Next.js 企业级开发模板',
@@ -110,10 +111,12 @@ async function main() {
   ];
 
   for (const skillData of skills) {
+    const tags = parseTagsInput(skillData.tags);
+
     await prisma.skill.create({
       data: {
         ...skillData,
-        tags: skillData.tags ? skillData.tags.split(',').map((t) => t.trim()) : [],
+        tags: toPrismaTagsValue(tags, prisma) as any,
       },
     });
   }

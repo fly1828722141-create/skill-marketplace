@@ -7,6 +7,12 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { successResponse, errorResponse, calculatePagination } from '@/lib/utils';
+import {
+  isSqliteProvider,
+  normalizeTagsFromDb,
+  parseTagsInput,
+  toPrismaTagsValue,
+} from '@/lib/tags';
 
 // ===========================================
 // GET /api/skills - 获取技能包列表
@@ -17,7 +23,7 @@ export async function GET(request: NextRequest) {
     
     // 解析查询参数
     const keyword = searchParams.get('keyword') || undefined;
-    const tags = searchParams.get('tags')?.split(',').filter(Boolean);
+    const tags = parseTagsInput(searchParams.get('tags'));
     const authorId = searchParams.get('authorId') || undefined;
     const sortBy = searchParams.get('sortBy') || 'createdAt';
     const sortOrder = searchParams.get('sortOrder') || 'desc';
@@ -39,10 +45,21 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    if (tags && tags.length > 0) {
-      where.tags = {
-        hasSome: tags,
-      };
+    if (tags.length > 0) {
+      if (isSqliteProvider(prisma)) {
+        where.AND = [
+          ...(where.AND || []),
+          ...tags.map((tag) => ({
+            tags: {
+              contains: tag,
+            },
+          })),
+        ];
+      } else {
+        where.tags = {
+          hasSome: tags,
+        };
+      }
     }
 
     if (authorId) {
@@ -73,11 +90,15 @@ export async function GET(request: NextRequest) {
       prisma.skill.count({ where }),
     ]);
 
+    const normalizedSkills = skills.map((skill) => ({
+      ...skill,
+      tags: normalizeTagsFromDb(skill.tags),
+    }));
     const totalPages = Math.ceil(total / pageSize);
 
     return NextResponse.json(
       successResponse({
-        items: skills,
+        items: normalizedSkills,
         total,
         page,
         pageSize,
@@ -110,6 +131,7 @@ export async function POST(request: NextRequest) {
     // 解析请求体
     const body = await request.json();
     const { title, description, tags, fileName, fileSize, fileType } = body;
+    const normalizedTags = parseTagsInput(tags);
 
     // 验证必填字段
     if (!title || !description || !fileName || !fileSize || !fileType) {
@@ -124,7 +146,7 @@ export async function POST(request: NextRequest) {
       data: {
         title,
         description,
-        tags: tags || [],
+        tags: toPrismaTagsValue(normalizedTags, prisma) as any,
         fileName,
         fileSize,
         fileType,
@@ -143,8 +165,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    const normalizedSkill = {
+      ...skill,
+      tags: normalizeTagsFromDb(skill.tags),
+    };
+
     return NextResponse.json(
-      successResponse(skill, '技能包创建成功'),
+      successResponse(normalizedSkill, '技能包创建成功'),
       { status: 201 }
     );
   } catch (error: any) {
