@@ -111,7 +111,10 @@ async function main() {
 
   for (const skillData of skills) {
     await prisma.skill.create({
-      data: skillData,
+      data: {
+        ...skillData,
+        tags: skillData.tags ? skillData.tags.split(',').map((t) => t.trim()) : [],
+      },
     });
   }
 
