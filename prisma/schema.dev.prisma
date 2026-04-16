@@ -1,0 +1,91 @@
+// Prisma Schema for Skill Marketplace (Local Development with SQLite)
+// 本地开发数据库：SQLite
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// ===========================================
+// 用户模型
+// ===========================================
+model User {
+  id            String    @id @default(uuid())
+  name          String
+  email         String    @unique
+  avatar        String?
+  department    String?
+  employeeId    String?   // 工号
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // 关联关系
+  skills        Skill[]   @relation("AuthorSkills")
+  downloads     Download[]
+  
+  @@map("users")
+}
+
+// ===========================================
+// 技能包模型
+// ===========================================
+model Skill {
+  id            String    @id @default(uuid())
+  title         String
+  description   String
+  categoryId    String?   // 分类 ID（预留扩展）
+  tags          String    // SQLite 不支持数组，使用逗号分隔
+  fileName      String
+  fileSize      Int       // 文件大小（字节）
+  fileType      String    // 文件类型：zip, tar.gz, rar, 7z
+  downloadCount Int       @default(0)
+  viewCount     Int       @default(0)
+  status        String    @default("active") // active, archived, deleted
+  authorId      String
+  author        User      @relation("AuthorSkills", fields: [authorId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // 关联关系
+  downloads     Download[]
+  
+  @@map("skills")
+}
+
+// ===========================================
+// 下载记录模型
+// ===========================================
+model Download {
+  id            String    @id @default(uuid())
+  userId        String
+  skillId       String
+  downloadedAt  DateTime  @default(now())
+  
+  // 关联关系
+  user          User      @relation(fields: [userId], references: [id])
+  skill         Skill     @relation(fields: [skillId], references: [id])
+  
+  // 唯一约束（同一用户对同一技能包的重复下载只记录一次）
+  @@unique([userId, skillId])
+  
+  @@map("downloads")
+}
+
+// ===========================================
+// 评论模型（预留扩展）
+// ===========================================
+model Comment {
+  id            String    @id @default(uuid())
+  content       String
+  rating        Int?      // 评分 1-5
+  userId        String
+  skillId       String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@map("comments")
+}

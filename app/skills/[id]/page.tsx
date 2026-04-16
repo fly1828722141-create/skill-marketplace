@@ -1,0 +1,455 @@
+/**
+ * 技能包详情页
+ * 
+ * 展示技能包详细信息、下载按钮、作者信息等
+ */
+
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { useSession } from 'next-auth/react';
+import { message } from 'antd';
+import { Skill, User } from '@/types';
+import { formatDateTime, formatFileSize, formatTime, formatNumber } from '@/lib/utils';
+
+export default function SkillDetailPage() {
+  const params = useParams();
+  const { data: session } = useSession();
+  const [skill, setSkill] = useState<Skill | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
+
+  const skillId = params.id as string;
+
+  // ===========================================
+  // 加载技能包详情
+  // ===========================================
+  useEffect(() => {
+    async function fetchSkill() {
+      try {
+        const response = await fetch(`/api/skills/${skillId}`);
+        const result = await response.json();
+
+        if (result.success) {
+          setSkill(result.data);
+        } else {
+          message.error(result.error || '技能包不存在');
+        }
+      } catch (error) {
+        console.error('加载失败:', error);
+        message.error('加载失败');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchSkill();
+  }, [skillId]);
+
+  // ===========================================
+  // 下载处理
+  // ===========================================
+  async function handleDownload() {
+    if (!session) {
+      message.warning('请先登录后下载');
+      return;
+    }
+
+    setDownloading(true);
+
+    try {
+      const response = await fetch('/api/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skillId }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // 打开下载链接
+        window.open(result.data.downloadUrl, '_blank');
+        
+        if (!result.data.downloadedBefore) {
+          message.success('下载成功，感谢分享！');
+        } else {
+          message.info('开始下载（已下载过此技能包）');
+        }
+
+        // 更新本地下载次数
+        if (result.data.downloadCountIncremented && skill) {
+          setSkill({ ...skill, downloadCount: skill.downloadCount + 1 });
+        }
+      } else {
+        message.error(result.error || '下载失败');
+      }
+    } catch (error) {
+      console.error('下载失败:', error);
+      message.error('下载失败，请重试');
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  if (loading) {
+    return <div className="loading-page">加载中...</div>;
+  }
+
+  if (!skill) {
+    return (
+      <div className="error-page">
+        <h2>❌ 技能包不存在</h2>
+        <Link href="/" className="btn btn-primary">返回首页</Link>
+      </div>
+    );
+  }
+
+  const isAuthor = session?.user?.id === skill.authorId;
+
+  return (
+    <div className="skill-detail-page">
+      {/* 面包屑导航 */}
+      <nav className="breadcrumb">
+        <Link href="/">首页</Link>
+        <span> / </span>
+        <Link href="/skills">技能库</Link>
+        <span> / </span>
+        <span>{skill.title}</span>
+      </nav>
+
+      {/* 主要内容 */}
+      <div className="skill-content">
+        {/* 左侧：技能包信息 */}
+        <div className="skill-main">
+          <div className="skill-header-card">
+            <h1 className="skill-title">{skill.title}</h1>
+            
+            <div className="skill-meta">
+              <span className="meta-item">
+                📅 {formatDateTime(skill.createdAt)}
+              </span>
+              <span className="meta-item">
+                📦 {formatFileSize(skill.fileSize)}
+              </span>
+              <span className="meta-item">
+                🏷️ {skill.fileType.toUpperCase()}
+              </span>
+            </div>
+
+            <div className="skill-tags">
+              {skill.tags.map((tag, index) => (
+                <span key={index} className="tag">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="skill-description-card">
+            <h3>📖 技能介绍</h3>
+            <p className="description-text">{skill.description}</p>
+          </div>
+
+          {/* 下载记录 - 暂时隐藏，等待类型修复 
+          {skill.downloads && skill.downloads.length > 0 && (
+            <div className="downloads-card">
+              <h3>📥 最近下载 ({skill.downloadCount})</h3>
+              <div className="downloads-list">
+                {skill.downloads.slice(0, 10).map((download) => (
+                  <div key={download.id} className="download-item">
+                    {download.user.avatar && (
+                      <img
+                        src={download.user.avatar}
+                        alt={download.user.name}
+                        className="user-avatar"
+                      />
+                    )}
+                    <span className="user-name">{download.user.name}</span>
+                    <span className="download-time">
+                      {formatTime(download.downloadedAt)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )} */}
+        </div>
+
+        {/* 右侧：操作卡片 */}
+        <aside className="skill-sidebar">
+          <div className="action-card">
+            <button
+              onClick={handleDownload}
+              disabled={downloading}
+              className="btn btn-primary btn-download"
+            >
+              {downloading ? '⏳ 准备中...' : `📥 下载 (${formatNumber(skill.downloadCount)})`}
+            </button>
+
+            <div className="stats-grid">
+              <div className="stat-item">
+                <div className="stat-value">{formatNumber(skill.viewCount)}</div>
+                <div className="stat-label">浏览</div>
+              </div>
+              <div className="stat-item">
+                <div className="stat-value">{formatNumber(skill.downloadCount)}</div>
+                <div className="stat-label">下载</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 作者信息 */}
+          <div className="author-card">
+            <h3>👤 作者</h3>
+            {skill.author && (
+              <div className="author-info">
+                {skill.author.avatar && (
+                  <img
+                    src={skill.author.avatar}
+                    alt={skill.author.name}
+                    className="author-avatar"
+                  />
+                )}
+                <div className="author-details">
+                  <div className="author-name">{skill.author.name}</div>
+                  {skill.author.department && (
+                    <div className="author-dept">{skill.author.department}</div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 作者操作 */}
+          {isAuthor && (
+            <div className="author-actions">
+              <h3>⚙️ 管理</h3>
+              <button className="btn btn-secondary btn-block">
+                ✏️ 编辑
+              </button>
+              <button className="btn btn-secondary btn-block">
+                🗑️ 删除
+              </button>
+            </div>
+          )}
+        </aside>
+      </div>
+
+      <style jsx>{`
+        .skill-detail-page {
+          max-width: 1200px;
+          margin: 0 auto;
+        }
+
+        .breadcrumb {
+          margin-bottom: var(--spacing-lg);
+          color: var(--text-secondary);
+          font-size: 14px;
+        }
+
+        .breadcrumb a {
+          color: var(--primary-color);
+          text-decoration: none;
+        }
+
+        .breadcrumb a:hover {
+          text-decoration: underline;
+        }
+
+        .skill-content {
+          display: grid;
+          grid-template-columns: 1fr 320px;
+          gap: var(--spacing-lg);
+        }
+
+        .skill-main {
+          min-width: 0;
+        }
+
+        .skill-header-card,
+        .skill-description-card,
+        .downloads-card {
+          background: white;
+          border-radius: var(--radius-md);
+          padding: var(--spacing-lg);
+          box-shadow: var(--shadow-sm);
+          margin-bottom: var(--spacing-lg);
+        }
+
+        .skill-title {
+          font-size: 28px;
+          margin-bottom: var(--spacing-md);
+          line-height: 1.4;
+        }
+
+        .skill-meta {
+          display: flex;
+          gap: var(--spacing-md);
+          flex-wrap: wrap;
+          margin-bottom: var(--spacing-md);
+          color: var(--text-secondary);
+          font-size: 14px;
+        }
+
+        .skill-tags {
+          margin-top: var(--spacing-md);
+        }
+
+        .description-text {
+          line-height: 1.8;
+          color: var(--text-primary);
+          white-space: pre-wrap;
+        }
+
+        .downloads-list {
+          margin-top: var(--spacing-md);
+        }
+
+        .download-item {
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-sm);
+          padding: var(--spacing-sm) 0;
+          border-bottom: 1px solid var(--border-color);
+        }
+
+        .download-item:last-child {
+          border-bottom: none;
+        }
+
+        .user-avatar {
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+        }
+
+        .user-name {
+          flex: 1;
+          font-size: 14px;
+        }
+
+        .download-time {
+          font-size: 12px;
+          color: var(--text-tertiary);
+        }
+
+        .action-card {
+          background: white;
+          border-radius: var(--radius-md);
+          padding: var(--spacing-lg);
+          box-shadow: var(--shadow-sm);
+          margin-bottom: var(--spacing-lg);
+          text-align: center;
+        }
+
+        .btn-download {
+          width: 100%;
+          padding: var(--spacing-md);
+          font-size: 16px;
+          margin-bottom: var(--spacing-lg);
+        }
+
+        .stats-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--spacing-md);
+        }
+
+        .stat-item {
+          text-align: center;
+          padding: var(--spacing-sm);
+          background-color: var(--bg-secondary);
+          border-radius: var(--radius-sm);
+        }
+
+        .stat-value {
+          font-size: 20px;
+          font-weight: 600;
+          color: var(--primary-color);
+        }
+
+        .stat-label {
+          font-size: 12px;
+          color: var(--text-secondary);
+          margin-top: var(--spacing-xs);
+        }
+
+        .author-card {
+          background: white;
+          border-radius: var(--radius-md);
+          padding: var(--spacing-lg);
+          box-shadow: var(--shadow-sm);
+          margin-bottom: var(--spacing-lg);
+        }
+
+        .author-card h3 {
+          margin-bottom: var(--spacing-md);
+        }
+
+        .author-info {
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-md);
+        }
+
+        .author-avatar {
+          width: 48px;
+          height: 48px;
+          border-radius: 50%;
+        }
+
+        .author-name {
+          font-weight: 500;
+          font-size: 16px;
+        }
+
+        .author-dept {
+          font-size: 13px;
+          color: var(--text-secondary);
+          margin-top: var(--spacing-xs);
+        }
+
+        .author-actions {
+          background: white;
+          border-radius: var(--radius-md);
+          padding: var(--spacing-lg);
+          box-shadow: var(--shadow-sm);
+        }
+
+        .author-actions h3 {
+          margin-bottom: var(--spacing-md);
+        }
+
+        .btn-block {
+          width: 100%;
+          margin-bottom: var(--spacing-sm);
+        }
+
+        .loading-page,
+        .error-page {
+          text-align: center;
+          padding: var(--spacing-xl);
+          background: white;
+          border-radius: var(--radius-md);
+          box-shadow: var(--shadow-md);
+        }
+
+        .error-page h2 {
+          margin-bottom: var(--spacing-md);
+        }
+
+        @media (max-width: 768px) {
+          .skill-content {
+            grid-template-columns: 1fr;
+          }
+
+          .skill-sidebar {
+            order: -1;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
