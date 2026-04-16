@@ -2,7 +2,34 @@
  * 阿里云 OSS 文件操作工具（修复版本）
  */
 
-import OSS from 'ali-oss';
+type OSSConstructor = new (options: {
+  region: string;
+  accessKeyId: string;
+  accessKeySecret: string;
+  bucket: string;
+}) => {
+  put: (
+    name: string,
+    file: Buffer,
+    options?: { headers?: Record<string, string> }
+  ) => Promise<{ url: string }>;
+  get: (name: string) => Promise<{ content: unknown }>;
+  delete: (name: string) => Promise<void>;
+  signatureUrl: (name: string, options: { expires: number }) => string;
+};
+
+let cachedOSSConstructor: OSSConstructor | null = null;
+
+function getOSSConstructor(): OSSConstructor {
+  if (!cachedOSSConstructor) {
+    // 延迟加载 ali-oss，避免构建阶段提前执行第三方库初始化
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const ossModule = require('ali-oss');
+    cachedOSSConstructor = (ossModule.default ?? ossModule) as OSSConstructor;
+  }
+
+  return cachedOSSConstructor;
+}
 
 // OSS 配置
 const ossConfig = {
@@ -17,6 +44,7 @@ export function getOSSClient() {
   if (!ossConfig.accessKeyId || !ossConfig.accessKeySecret) {
     throw new Error('OSS 配置缺失，请检查环境变量');
   }
+  const OSS = getOSSConstructor();
   return new OSS(ossConfig);
 }
 

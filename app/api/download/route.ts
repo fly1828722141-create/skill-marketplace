@@ -8,8 +8,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
-import { generateTempUrl } from '@/lib/oss';
 import { successResponse, errorResponse } from '@/lib/utils';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 // ===========================================
 // POST /api/download - 创建下载记录并获取下载链接
@@ -79,6 +81,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 获取临时下载链接（有效期 1 小时）
+    const { generateTempUrl } = await import('@/lib/oss');
     const downloadUrl = await generateTempUrl(skill.fileName, 3600);
 
     return NextResponse.json(
