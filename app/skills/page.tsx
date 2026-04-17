@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Skill, SkillCategory } from '@/types';
 import { trackEvent } from '@/lib/analytics-client';
+import { getFallbackSkillCategories } from '@/lib/category-presets';
 import { formatNumber, formatTime, formatFileSize } from '@/lib/utils';
 
 function SkillsContent() {
@@ -84,14 +85,25 @@ function SkillsContent() {
     let mounted = true;
 
     async function fetchCategories() {
+      const fallbackCategories = getFallbackSkillCategories();
+
       try {
         const response = await fetch('/api/categories');
         const result = await response.json();
-        if (mounted && result.success) {
-          setCategories(result.data || []);
+        if (mounted) {
+          const serverCategories =
+            result?.success && Array.isArray(result.data)
+              ? (result.data as SkillCategory[])
+              : [];
+          setCategories(
+            serverCategories.length > 0 ? serverCategories : fallbackCategories
+          );
         }
       } catch (error) {
         console.error('分类加载失败:', error);
+        if (mounted) {
+          setCategories(fallbackCategories);
+        }
       }
     }
 

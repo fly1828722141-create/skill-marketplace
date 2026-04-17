@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Skill, SkillCategory } from '@/types';
 import { trackEvent } from '@/lib/analytics-client';
+import { getFallbackSkillCategories } from '@/lib/category-presets';
 import { formatNumber } from '@/lib/utils';
 
 const ALL_CATEGORY_ID = 'all';
@@ -82,6 +83,8 @@ export default function HomePage() {
     let mounted = true;
 
     async function fetchInitialData() {
+      const fallbackCategories = getFallbackSkillCategories();
+
       try {
         setLoading(true);
         const [skillsResponse, categoriesResponse, overviewResponse] = await Promise.all([
@@ -99,8 +102,14 @@ export default function HomePage() {
           setSkills(skillsResult.data.items || []);
         }
 
-        if (mounted && categoriesResult.success) {
-          setCategories(categoriesResult.data || []);
+        if (mounted) {
+          const serverCategories =
+            categoriesResult?.success && Array.isArray(categoriesResult.data)
+              ? (categoriesResult.data as SkillCategory[])
+              : [];
+          setCategories(
+            serverCategories.length > 0 ? serverCategories : fallbackCategories
+          );
         }
 
         if (mounted && overviewResult.success) {
@@ -154,7 +163,9 @@ export default function HomePage() {
 
     return skills.filter((skill) => {
       const categoryMatch =
-        activeCategoryId === ALL_CATEGORY_ID || skill.categoryId === activeCategoryId;
+        activeCategoryId === ALL_CATEGORY_ID ||
+        skill.categoryId === activeCategoryId ||
+        skill.category?.slug === activeCategoryId;
       const keywordMatch =
         !normalizedKeyword ||
         skill.title.toLowerCase().includes(normalizedKeyword) ||

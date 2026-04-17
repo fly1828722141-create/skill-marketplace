@@ -70,12 +70,15 @@ export async function POST(request: NextRequest) {
     const tags = parseTagsInput(tagsInput);
     await ensureDefaultCategories();
 
-    const category = await prisma.skillCategory.findUnique({
-      where: { id: categoryId },
-      select: { id: true, status: true },
+    const category = await prisma.skillCategory.findFirst({
+      where: {
+        status: 'active',
+        OR: [{ id: categoryId }, { slug: categoryId }],
+      },
+      select: { id: true },
     });
 
-    if (!category || category.status !== 'active') {
+    if (!category) {
       return NextResponse.json(
         errorResponse('请选择有效的 Skill 分类', 'VALIDATION_ERROR'),
         { status: 400 }

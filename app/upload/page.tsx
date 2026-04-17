@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { message } from 'antd';
 import { useSession } from 'next-auth/react';
 import { SkillCategory } from '@/types';
+import { getFallbackSkillCategories } from '@/lib/category-presets';
 
 export default function UploadPage() {
   const router = useRouter();
@@ -44,13 +45,20 @@ export default function UploadPage() {
     }
 
     async function fetchCategories() {
+      const fallbackCategories = getFallbackSkillCategories();
+
       try {
         setCategoriesLoading(true);
         const response = await fetch('/api/categories');
         const result = await response.json();
 
-        if (mounted && result.success) {
-          const items = result.data as SkillCategory[];
+        const serverItems =
+          result?.success && Array.isArray(result.data)
+            ? (result.data as SkillCategory[])
+            : [];
+        const items = serverItems.length > 0 ? serverItems : fallbackCategories;
+
+        if (mounted) {
           setCategories(items);
           setFormData((prev) =>
             !prev.categoryId && items.length > 0
@@ -58,9 +66,21 @@ export default function UploadPage() {
               : prev
           );
         }
+
+        if (serverItems.length === 0) {
+          console.warn('分类接口返回为空，已自动使用默认分类');
+        }
       } catch (error) {
         console.error('加载分类失败:', error);
-        message.error('加载分类失败，请刷新页面重试');
+
+        if (mounted) {
+          setCategories(fallbackCategories);
+          setFormData((prev) =>
+            !prev.categoryId && fallbackCategories.length > 0
+              ? { ...prev, categoryId: fallbackCategories[0].id }
+              : prev
+          );
+        }
       } finally {
         if (mounted) {
           setCategoriesLoading(false);

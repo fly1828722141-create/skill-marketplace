@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { ensureDefaultCategories } from '@/lib/skill-categories';
-import { errorResponse, successResponse } from '@/lib/utils';
+import { getFallbackSkillCategories } from '@/lib/category-presets';
+import { successResponse } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -10,6 +11,8 @@ export const revalidate = 0;
 // GET /api/categories - 获取分类列表
 // ===========================================
 export async function GET() {
+  const fallbackCategories = getFallbackSkillCategories();
+
   try {
     try {
       await ensureDefaultCategories();
@@ -29,12 +32,17 @@ export async function GET() {
       },
     });
 
+    if (categories.length === 0) {
+      return NextResponse.json(
+        successResponse(fallbackCategories, '分类为空，已回退默认分类')
+      );
+    }
+
     return NextResponse.json(successResponse(categories));
   } catch (error: any) {
     console.error('获取分类列表失败:', error);
     return NextResponse.json(
-      errorResponse('获取分类列表失败', 'CATEGORY_FETCH_ERROR'),
-      { status: 500 }
+      successResponse(fallbackCategories, '分类服务暂时降级，已返回默认分类')
     );
   }
 }
