@@ -83,3 +83,4 @@ downloads/
 # ===========================================
 .git-credentials
 .vercel
+.env*.local

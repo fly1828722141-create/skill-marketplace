@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "prisma generate --schema=./prisma/schema.prisma",
+    "prebuild": "if [ -n \"$DATABASE_URL\" ]; then prisma db push --schema=./prisma/schema.prisma; else echo 'Skip prisma db push: DATABASE_URL not set'; fi && prisma generate --schema=./prisma/schema.prisma",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
