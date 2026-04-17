@@ -12,8 +12,22 @@ export interface User {
   avatar?: string;
   department?: string;
   employeeId?: string;
+  provider?: string;
+  providerAccountId?: string;
+  lastLoginAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// ===========================================
+// 分类类型
+// ===========================================
+export interface SkillCategory {
+  id: string;
+  slug: string;
+  name: string;
+  icon?: string;
+  sortOrder?: number;
 }
 
 // ===========================================
@@ -22,8 +36,10 @@ export interface User {
 export interface Skill {
   id: string;
   title: string;
+  summary?: string;
   description: string;
   categoryId?: string;
+  category?: SkillCategory;
   tags: string[];
   fileName: string;
   fileSize: number;
@@ -35,6 +51,9 @@ export interface Skill {
   author?: User;
   createdAt: string;
   updatedAt: string;
+  _count?: {
+    comments: number;
+  };
 }
 
 // ===========================================
@@ -56,11 +75,45 @@ export interface Comment {
   id: string;
   content: string;
   rating?: number;
+  likeCount: number;
   userId: string;
   skillId: string;
   createdAt: string;
   updatedAt: string;
   user?: User;
+  images?: CommentImage[];
+  likedByCurrentUser?: boolean;
+}
+
+export interface CommentImage {
+  id: string;
+  commentId: string;
+  url: string;
+  fileName?: string;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface CommentLike {
+  id: string;
+  commentId: string;
+  userId: string;
+  createdAt: string;
+}
+
+export interface EventLog {
+  id: string;
+  eventName: string;
+  page?: string;
+  module?: string;
+  action?: string;
+  userId?: string;
+  skillId?: string;
+  categoryId?: string;
+  sessionId?: string;
+  anonymousId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
 }
 
 // ===========================================
@@ -121,6 +174,8 @@ export interface SkillFilters {
 // ===========================================
 export interface CreateSkillFormData {
   title: string;
+  summary: string;
+  categoryId: string;
   description: string;
   tags: string[];
   file: File;
@@ -128,6 +183,8 @@ export interface CreateSkillFormData {
 
 export interface UpdateSkillFormData {
   title?: string;
+  summary?: string;
+  categoryId?: string;
   description?: string;
   tags?: string[];
 }
@@ -147,4 +204,12 @@ export interface UserStats {
   uploadedSkills: number;
   downloadedSkills: number;
   totalDownloads: number;
+}
+
+export interface SiteOverviewStats {
+  totalSkills: number;
+  totalUsers: number;
+  totalDownloads: number;
+  totalViews: number;
+  updatedAt: string;
 }

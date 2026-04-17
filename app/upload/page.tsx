@@ -6,19 +6,61 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { message } from 'antd';
+import { signIn, useSession } from 'next-auth/react';
+import { SkillCategory } from '@/types';
 
 export default function UploadPage() {
   const router = useRouter();
+  const { data: session, status } = useSession();
   const [loading, setLoading] = useState(false);
+  const [categories, setCategories] = useState<SkillCategory[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [formData, setFormData] = useState({
     title: '',
+    summary: '',
+    categoryId: '',
     description: '',
     tags: '',
   });
   const [file, setFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function fetchCategories() {
+      try {
+        setCategoriesLoading(true);
+        const response = await fetch('/api/categories');
+        const result = await response.json();
+
+        if (mounted && result.success) {
+          const items = result.data as SkillCategory[];
+          setCategories(items);
+          setFormData((prev) =>
+            !prev.categoryId && items.length > 0
+              ? { ...prev, categoryId: items[0].id }
+              : prev
+          );
+        }
+      } catch (error) {
+        console.error('加载分类失败:', error);
+        message.error('加载分类失败，请刷新页面重试');
+      } finally {
+        if (mounted) {
+          setCategoriesLoading(false);
+        }
+      }
+    }
+
+    fetchCategories();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // ===========================================
   // 表单提交处理
@@ -31,8 +73,13 @@ export default function UploadPage() {
       return;
     }
 
-    if (!formData.title || !formData.description) {
-      message.error('请填写标题和描述');
+    if (!formData.title || !formData.summary || !formData.description || !formData.categoryId) {
+      message.error('请完整填写标题、功能简介、分类和描述');
+      return;
+    }
+
+    if (formData.summary.trim().length < 10) {
+      message.error('功能简介至少 10 个字');
       return;
     }
 
@@ -43,6 +90,8 @@ export default function UploadPage() {
       const uploadData = new FormData();
       uploadData.append('file', file);
       uploadData.append('title', formData.title);
+      uploadData.append('summary', formData.summary);
+      uploadData.append('categoryId', formData.categoryId);
       uploadData.append('description', formData.description);
       uploadData.append('tags', formData.tags);
 
@@ -76,9 +125,9 @@ export default function UploadPage() {
     if (selectedFile) {
       // 验证文件类型
       const validTypes = ['.zip', '.tar.gz', '.rar', '.7z'];
-      const ext = '.' + selectedFile.name.split('.').pop()?.toLowerCase();
+      const lowerName = selectedFile.name.toLowerCase();
       
-      if (!validTypes.includes(ext)) {
+      if (!validTypes.some((ext) => lowerName.endsWith(ext))) {
         message.error('不支持的文件类型，仅支持 .zip, .tar.gz, .rar, .7z');
         e.target.value = '';
         return;
@@ -94,6 +143,26 @@ export default function UploadPage() {
 
       setFile(selectedFile);
     }
+  }
+
+  if (status === 'loading') {
+    return <div className="loading-page">登录状态检查中...</div>;
+  }
+
+  if (!session?.user) {
+    return (
+      <div className="upload-page">
+        <div className="upload-form" style={{ textAlign: 'center' }}>
+          <h2>登录后可上传 Skill</h2>
+          <p style={{ marginBottom: 20, color: 'var(--text-secondary)' }}>
+            请先使用 Google 账号登录，再提交 Skill 内容与文件。
+          </p>
+          <button type="button" className="btn btn-primary" onClick={() => signIn('google', { callbackUrl: '/upload' })}>
+            使用 Google 登录
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -120,6 +189,50 @@ export default function UploadPage() {
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               required
             />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="summary">
+              功能简介 <span className="required">*</span>
+            </label>
+            <textarea
+              id="summary"
+              className="input textarea"
+              placeholder="至少 10 个字，说明这个 Skill 能解决什么问题..."
+              rows={3}
+              value={formData.summary}
+              onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
+              required
+            />
+            <p className="help-text">
+              已输入 {formData.summary.trim().length} 字（至少 10 字）
+            </p>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="categoryId">
+              Skill 类型 <span className="required">*</span>
+            </label>
+            <select
+              id="categoryId"
+              className="input"
+              value={formData.categoryId}
+              onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+              disabled={categoriesLoading}
+              required
+            >
+              {categoriesLoading ? (
+                <option value="">加载分类中...</option>
+              ) : categories.length === 0 ? (
+                <option value="">暂无可用分类</option>
+              ) : (
+                categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))
+              )}
+            </select>
           </div>
 
           <div className="form-group">
@@ -293,6 +406,12 @@ export default function UploadPage() {
 
         .file-size {
           font-size: 13px;
+          color: var(--text-secondary);
+        }
+
+        .loading-page {
+          text-align: center;
+          padding: 48px 0;
           color: var(--text-secondary);
         }
 

@@ -4,7 +4,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { getPublicUser } from '@/lib/public-user';
+import { getCurrentUser } from '@/lib/auth';
+import { ensureDefaultCategories } from '@/lib/skill-categories';
+import { recordEvent } from '@/lib/event-log';
 import { successResponse, errorResponse, calculatePagination } from '@/lib/utils';
 import {
   isSqliteProvider,
@@ -24,8 +26,15 @@ export async function GET(request: NextRequest) {
     const keyword = searchParams.get('keyword') || undefined;
     const tags = parseTagsInput(searchParams.get('tags'));
     const authorId = searchParams.get('authorId') || undefined;
-    const sortBy = searchParams.get('sortBy') || 'createdAt';
-    const sortOrder = searchParams.get('sortOrder') || 'desc';
+    const categoryId = searchParams.get('categoryId') || undefined;
+    const sortByInput = searchParams.get('sortBy') || 'createdAt';
+    const sortOrderInput = searchParams.get('sortOrder') || 'desc';
+    const sortBy = ['createdAt', 'downloadCount', 'viewCount', 'updatedAt'].includes(
+      sortByInput
+    )
+      ? sortByInput
+      : 'createdAt';
+    const sortOrder = sortOrderInput === 'asc' ? 'asc' : 'desc';
     const page = parseInt(searchParams.get('page') || '1', 10);
     const pageSize = parseInt(searchParams.get('pageSize') || '20', 10);
 
@@ -65,6 +74,10 @@ export async function GET(request: NextRequest) {
       where.authorId = authorId;
     }
 
+    if (categoryId) {
+      where.categoryId = categoryId;
+    }
+
     // 查询数据库
     const [skills, total] = await Promise.all([
       prisma.skill.findMany({
@@ -77,6 +90,19 @@ export async function GET(request: NextRequest) {
               email: true,
               avatar: true,
               department: true,
+            },
+          },
+          category: {
+            select: {
+              id: true,
+              slug: true,
+              name: true,
+              icon: true,
+            },
+          },
+          _count: {
+            select: {
+              comments: true,
             },
           },
         },
@@ -118,17 +144,62 @@ export async function GET(request: NextRequest) {
 // ===========================================
 export async function POST(request: NextRequest) {
   try {
-    const publicUser = await getPublicUser();
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser) {
+      return NextResponse.json(
+        errorResponse('请先登录后再上传 Skill', 'UNAUTHORIZED'),
+        { status: 401 }
+      );
+    }
 
     // 解析请求体
     const body = await request.json();
-    const { title, description, tags, fileName, fileSize, fileType } = body;
+    const {
+      title,
+      summary,
+      description,
+      categoryId,
+      tags,
+      fileName,
+      fileSize,
+      fileType,
+    } = body;
     const normalizedTags = parseTagsInput(tags);
 
     // 验证必填字段
-    if (!title || !description || !fileName || !fileSize || !fileType) {
+    if (
+      !title ||
+      !summary ||
+      !description ||
+      !categoryId ||
+      !fileName ||
+      !fileSize ||
+      !fileType
+    ) {
       return NextResponse.json(
         errorResponse('缺少必填字段', 'VALIDATION_ERROR'),
+        { status: 400 }
+      );
+    }
+
+    if (typeof summary !== 'string' || summary.trim().length < 10) {
+      return NextResponse.json(
+        errorResponse('功能简介至少 10 个字', 'VALIDATION_ERROR'),
+        { status: 400 }
+      );
+    }
+
+    await ensureDefaultCategories();
+
+    const category = await prisma.skillCategory.findUnique({
+      where: { id: categoryId },
+      select: { id: true, status: true },
+    });
+
+    if (!category || category.status !== 'active') {
+      return NextResponse.json(
+        errorResponse('请选择有效的 Skill 分类', 'VALIDATION_ERROR'),
         { status: 400 }
       );
     }
@@ -137,12 +208,14 @@ export async function POST(request: NextRequest) {
     const skill = await prisma.skill.create({
       data: {
         title,
+        summary: summary.trim(),
         description,
+        categoryId: category.id,
         tags: toPrismaTagsValue(normalizedTags, prisma) as any,
         fileName,
         fileSize,
         fileType,
-        authorId: publicUser.id,
+        authorId: currentUser.id,
         status: 'active',
       },
       include: {
@@ -154,6 +227,14 @@ export async function POST(request: NextRequest) {
             avatar: true,
           },
         },
+        category: {
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+            icon: true,
+          },
+        },
       },
     });
 
@@ -161,6 +242,21 @@ export async function POST(request: NextRequest) {
       ...skill,
       tags: normalizeTagsFromDb(skill.tags),
     };
+
+    await recordEvent({
+      eventName: 'skill_upload_success',
+      page: '/upload',
+      module: 'upload',
+      action: 'create',
+      userId: currentUser.id,
+      skillId: skill.id,
+      categoryId: skill.categoryId,
+      metadata: {
+        fileType,
+        fileSize,
+        source: 'json-api',
+      },
+    });
 
     return NextResponse.json(
       successResponse(normalizedSkill, '技能包创建成功'),

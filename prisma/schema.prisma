@@ -20,14 +20,42 @@ model User {
   avatar        String?
   department    String?
   employeeId    String?   // 工号
+  provider      String?   // 登录渠道，例如 google
+  providerAccountId String? // 第三方账号 ID（例如 Google sub）
+  lastLoginAt   DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   
   // 关联关系
   skills        Skill[]   @relation("AuthorSkills")
   downloads     Download[]
+  comments      Comment[]
+  commentLikes  CommentLike[]
+  eventLogs     EventLog[]
   
+  @@unique([provider, providerAccountId])
   @@map("users")
+}
+
+// ===========================================
+// 技能分类模型
+// ===========================================
+model SkillCategory {
+  id            String    @id @default(uuid())
+  slug          String    @unique
+  name          String    @unique
+  icon          String?
+  sortOrder     Int       @default(0)
+  status        String    @default("active") // active, inactive
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // 关联关系
+  skills        Skill[]
+  eventLogs     EventLog[]
+
+  @@index([sortOrder])
+  @@map("skill_categories")
 }
 
 // ===========================================
@@ -36,8 +64,10 @@ model User {
 model Skill {
   id            String    @id @default(uuid())
   title         String
+  summary       String?   @db.Text // 功能简介（新上传强制填写 >= 10 字）
   description   String    @db.Text
   categoryId    String?   // 分类 ID（预留扩展）
+  category      SkillCategory? @relation(fields: [categoryId], references: [id])
   tags          String[]  // 标签数组
   fileName      String    // OSS 文件名
   fileSize      Int       // 文件大小（字节）
@@ -52,12 +82,15 @@ model Skill {
   
   // 关联关系
   downloads     Download[]
+  comments      Comment[]
+  eventLogs     EventLog[]
   
   // 索引优化
   @@index([title])
   @@index([tags])
   @@index([authorId])
   @@index([categoryId])
+  @@index([categoryId, createdAt])
   @@map("skills")
 }
 
@@ -88,16 +121,74 @@ model Comment {
   id            String    @id @default(uuid())
   content       String    @db.Text
   rating        Int?      // 评分 1-5
+  likeCount     Int       @default(0)
   userId        String
   skillId       String
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   
-  // 关联关系（需要时添加）
-  // user User @relation(fields: [userId], references: [id])
-  // skill Skill @relation(fields: [skillId], references: [id])
+  // 关联关系
+  user          User      @relation(fields: [userId], references: [id])
+  skill         Skill     @relation(fields: [skillId], references: [id])
+  images        CommentImage[]
+  likes         CommentLike[]
   
   @@index([skillId])
   @@index([userId])
+  @@index([skillId, likeCount])
+  @@index([skillId, createdAt])
   @@map("comments")
+}
+
+model CommentImage {
+  id            String    @id @default(uuid())
+  commentId     String
+  url           String
+  fileName      String?
+  sortOrder     Int       @default(0)
+  createdAt     DateTime  @default(now())
+
+  comment       Comment   @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@index([commentId, sortOrder])
+  @@map("comment_images")
+}
+
+model CommentLike {
+  id            String    @id @default(uuid())
+  commentId     String
+  userId        String
+  createdAt     DateTime  @default(now())
+
+  comment       Comment   @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@index([userId])
+  @@map("comment_likes")
+}
+
+model EventLog {
+  id            String          @id @default(uuid())
+  eventName     String
+  page          String?
+  module        String?
+  action        String?
+  userId        String?
+  skillId       String?
+  categoryId    String?
+  sessionId     String?
+  anonymousId   String?
+  metadata      Json?
+  createdAt     DateTime        @default(now())
+
+  user          User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  skill         Skill?          @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  category      SkillCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([eventName, createdAt])
+  @@index([userId, createdAt])
+  @@index([skillId, createdAt])
+  @@index([categoryId, createdAt])
+  @@map("event_logs")
 }

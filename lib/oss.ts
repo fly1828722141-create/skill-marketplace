@@ -122,7 +122,10 @@ export function validateFile(fileName: string, fileSize: number): {
   const allowedTypes = ['.zip', '.tar.gz', '.rar', '.7z'];
   const maxFileSize = parseInt(process.env.MAX_FILE_SIZE_MB || '50') * 1024 * 1024;
 
-  const ext = '.' + fileName.split('.').pop()?.toLowerCase();
+  const lowerName = fileName.toLowerCase();
+  const ext = lowerName.endsWith('.tar.gz')
+    ? '.tar.gz'
+    : `.${lowerName.split('.').pop() || ''}`;
   
   if (!allowedTypes.includes(ext)) {
     return {

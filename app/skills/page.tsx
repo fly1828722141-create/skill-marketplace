@@ -7,7 +7,8 @@
 import { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Skill } from '@/types';
+import { Skill, SkillCategory } from '@/types';
+import { trackEvent } from '@/lib/analytics-client';
 import { formatNumber, formatTime, formatFileSize } from '@/lib/utils';
 
 function SkillsContent() {
@@ -15,19 +16,33 @@ function SkillsContent() {
   const router = useRouter();
   
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [categories, setCategories] = useState<SkillCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   
   const [keyword, setKeyword] = useState(searchParams.get('keyword') || '');
+  const [categoryId, setCategoryId] = useState(searchParams.get('categoryId') || 'all');
   const [sortBy, setSortBy] = useState(searchParams.get('sortBy') || 'createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(
     (searchParams.get('sortOrder') as 'asc' | 'desc') || 'desc'
   );
 
+  useEffect(() => {
+    setKeyword(searchParams.get('keyword') || '');
+    setCategoryId(searchParams.get('categoryId') || 'all');
+    setSortBy(searchParams.get('sortBy') || 'createdAt');
+    setSortOrder((searchParams.get('sortOrder') as 'asc' | 'desc') || 'desc');
+  }, [searchParams]);
+
   // 加载技能包列表
   useEffect(() => {
-    async function fetchSkills() {
-      setLoading(true);
+    let mounted = true;
+
+    async function fetchSkills(silent: boolean) {
+      if (!silent) {
+        setLoading(true);
+      }
+
       try {
         const params = new URLSearchParams({
           keyword: keyword,
@@ -36,32 +51,80 @@ function SkillsContent() {
           pageSize: '20',
         });
 
+        if (categoryId !== 'all') {
+          params.set('categoryId', categoryId);
+        }
+
         const response = await fetch(`/api/skills?${params}`);
         const result = await response.json();
 
-        if (result.success) {
+        if (mounted && result.success) {
           setSkills(result.data.items);
           setTotal(result.data.total);
         }
       } catch (error) {
         console.error('加载失败:', error);
       } finally {
-        setLoading(false);
+        if (mounted && !silent) {
+          setLoading(false);
+        }
       }
     }
 
-    fetchSkills();
-  }, [keyword, sortBy, sortOrder]);
+    fetchSkills(false);
+    const timer = setInterval(() => fetchSkills(true), 15000);
+
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
+  }, [categoryId, keyword, sortBy, sortOrder]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function fetchCategories() {
+      try {
+        const response = await fetch('/api/categories');
+        const result = await response.json();
+        if (mounted && result.success) {
+          setCategories(result.data || []);
+        }
+      } catch (error) {
+        console.error('分类加载失败:', error);
+      }
+    }
+
+    fetchCategories();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // 搜索处理
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    router.push(`/skills?keyword=${keyword}&sortBy=${sortBy}&sortOrder=${sortOrder}`);
+    trackEvent({
+      eventName: 'skill_search',
+      module: 'skills-page',
+      action: 'submit',
+      metadata: {
+        keyword,
+        categoryId,
+      },
+    });
+    router.push(
+      `/skills?keyword=${keyword}&categoryId=${categoryId}&sortBy=${sortBy}&sortOrder=${sortOrder}`
+    );
   }
 
   return (
     <div className="skills-page">
       <h1>📚 技能库</h1>
+      <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
+        实时数据：共 {formatNumber(total)} 个 Skill
+      </p>
       
       {/* 搜索栏 */}
       <form onSubmit={handleSearch} className="search-form">
@@ -72,6 +135,28 @@ function SkillsContent() {
           onChange={(e) => setKeyword(e.target.value)}
           className="search-input"
         />
+        <select
+          value={categoryId}
+          onChange={(e) => {
+            const nextCategoryId = e.target.value;
+            setCategoryId(nextCategoryId);
+            trackEvent({
+              eventName: 'category_click',
+              module: 'skills-page',
+              action: 'change',
+              categoryId: nextCategoryId === 'all' ? undefined : nextCategoryId,
+            });
+          }}
+          className="search-input"
+          style={{ maxWidth: 220 }}
+        >
+          <option value="all">全部分类</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
         <button type="submit" className="search-button">搜索</button>
       </form>
 
@@ -83,7 +168,19 @@ function SkillsContent() {
       ) : (
         <div className="skills-grid">
           {skills.map((skill) => (
-            <Link key={skill.id} href={`/skills/${skill.id}`} className="skill-card">
+            <Link
+              key={skill.id}
+              href={`/skills/${skill.id}`}
+              className="skill-card"
+              onClick={() =>
+                trackEvent({
+                  eventName: 'skill_detail_open',
+                  module: 'skills-page',
+                  action: 'click',
+                  skillId: skill.id,
+                })
+              }
+            >
               <h3>{skill.title}</h3>
               <p>{skill.description}</p>
               <div className="skill-meta">

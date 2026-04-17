@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { successResponse, errorResponse } from '@/lib/utils';
 import { normalizeTagsFromDb, parseTagsInput, toPrismaTagsValue } from '@/lib/tags';
+import { ensureDefaultCategories } from '@/lib/skill-categories';
 
 // ===========================================
 // GET /api/skills/[id] - 获取技能包详情
@@ -17,47 +18,63 @@ export async function GET(
   try {
     const skillId = params.id;
 
-    // 查询技能包详情
-    const skill = await prisma.skill.findUnique({
-      where: { id: skillId },
-      include: {
-        author: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            avatar: true,
-            department: true,
+    let skill: any = null;
+    try {
+      // 原子递增浏览量，返回最新详情
+      skill = await prisma.skill.update({
+        where: { id: skillId },
+        data: {
+          viewCount: {
+            increment: 1,
           },
         },
-        downloads: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                avatar: true,
-              },
+        include: {
+          author: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              avatar: true,
+              department: true,
             },
           },
-          take: 10,
-          orderBy: { downloadedAt: 'desc' },
+          downloads: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  avatar: true,
+                },
+              },
+            },
+            take: 10,
+            orderBy: { downloadedAt: 'desc' },
+          },
+          category: {
+            select: {
+              id: true,
+              slug: true,
+              name: true,
+              icon: true,
+            },
+          },
+          _count: {
+            select: {
+              comments: true,
+            },
+          },
         },
-      },
-    });
-
-    if (!skill) {
-      return NextResponse.json(
-        errorResponse('技能包不存在', 'SKILL_NOT_FOUND'),
-        { status: 404 }
-      );
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2025') {
+        return NextResponse.json(
+          errorResponse('技能包不存在', 'SKILL_NOT_FOUND'),
+          { status: 404 }
+        );
+      }
+      throw error;
     }
-
-    // 增加浏览次数
-    await prisma.skill.update({
-      where: { id: skillId },
-      data: { viewCount: skill.viewCount + 1 },
-    });
 
     const normalizedSkill = {
       ...skill,
@@ -84,7 +101,7 @@ export async function PUT(
   try {
     const skillId = params.id;
     const body = await request.json();
-    const { title, description, tags } = body;
+    const { title, summary, description, categoryId, tags } = body;
 
     // 检查技能包是否存在
     const existingSkill = await prisma.skill.findUnique({
@@ -103,12 +120,47 @@ export async function PUT(
         ? parseTagsInput(tags)
         : normalizeTagsFromDb(existingSkill.tags);
 
+    let normalizedSummary: string | undefined;
+    if (summary !== undefined) {
+      if (typeof summary !== 'string' || summary.trim().length < 10) {
+        return NextResponse.json(
+          errorResponse('功能简介至少 10 个字', 'VALIDATION_ERROR'),
+          { status: 400 }
+        );
+      }
+      normalizedSummary = summary.trim();
+    }
+
+    let normalizedCategoryId: string | undefined;
+    if (categoryId !== undefined) {
+      await ensureDefaultCategories();
+      const category = await prisma.skillCategory.findUnique({
+        where: { id: categoryId },
+        select: { id: true, status: true },
+      });
+
+      if (!category || category.status !== 'active') {
+        return NextResponse.json(
+          errorResponse('请选择有效的 Skill 分类', 'VALIDATION_ERROR'),
+          { status: 400 }
+        );
+      }
+
+      normalizedCategoryId = category.id;
+    }
+
     // 更新技能包
     const updatedSkill = await prisma.skill.update({
       where: { id: skillId },
       data: {
         title: title || existingSkill.title,
+        summary:
+          normalizedSummary !== undefined ? normalizedSummary : existingSkill.summary,
         description: description || existingSkill.description,
+        categoryId:
+          normalizedCategoryId !== undefined
+            ? normalizedCategoryId
+            : existingSkill.categoryId,
         tags: toPrismaTagsValue(normalizedTags, prisma) as any,
       },
       include: {
@@ -118,6 +170,14 @@ export async function PUT(
             name: true,
             email: true,
             avatar: true,
+          },
+        },
+        category: {
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+            icon: true,
           },
         },
       },

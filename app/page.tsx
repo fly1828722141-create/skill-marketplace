@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Skill } from '@/types';
+import { Skill, SkillCategory } from '@/types';
+import { trackEvent } from '@/lib/analytics-client';
 import { formatNumber } from '@/lib/utils';
 
-const CATEGORY_PRESETS = ['全部', '数据分析', '内容创作', '办公效率', '开发工具', '图像处理', '营销运营'];
+const ALL_CATEGORY_ID = 'all';
 const FEATURED_DOWNLOAD = {
   title: 'alicode-pages-deploy.skill.zip',
   url: '/downloads/alicode-pages-deploy.skill.zip',
@@ -15,20 +16,37 @@ const FEATURED_DOWNLOAD = {
 
 type IconKind = 'data' | 'content' | 'office' | 'dev' | 'image' | 'marketing' | 'generic';
 
+interface SiteOverview {
+  totalSkills: number;
+  totalDownloads: number;
+  totalViews: number;
+  totalUsers: number;
+  updatedAt?: string;
+}
+
 const CATEGORY_ICON: Record<string, { icon: IconKind; color: string }> = {
-  数据分析: { icon: 'data', color: 'blue' },
-  内容创作: { icon: 'content', color: 'purple' },
-  办公效率: { icon: 'office', color: 'green' },
+  '数据分析与 BI': { icon: 'data', color: 'blue' },
+  内容写作与翻译: { icon: 'content', color: 'purple' },
+  办公效率与自动化: { icon: 'office', color: 'green' },
   开发工具: { icon: 'dev', color: 'orange' },
-  图像处理: { icon: 'image', color: 'pink' },
-  营销运营: { icon: 'marketing', color: 'teal' },
+  开发工具与工程: { icon: 'dev', color: 'orange' },
+  设计与多媒体: { icon: 'image', color: 'pink' },
+  营销与增长: { icon: 'marketing', color: 'teal' },
+  运营与客服: { icon: 'marketing', color: 'teal' },
+  '销售与 CRM': { icon: 'marketing', color: 'teal' },
+  'AI 模型与多模态': { icon: 'data', color: 'blue' },
+  教育与知识管理: { icon: 'content', color: 'green' },
+  行业场景解决方案: { icon: 'marketing', color: 'teal' },
+  工作流模板与编排: { icon: 'office', color: 'green' },
   默认: { icon: 'generic', color: 'blue' },
 };
 
 function pickCategory(skill: Skill): string {
+  if (skill.category?.name) {
+    return skill.category.name;
+  }
+
   if (skill.tags?.length) {
-    const hit = CATEGORY_PRESETS.find((tag) => tag !== '全部' && skill.tags.includes(tag));
-    if (hit) return hit;
     return skill.tags[0];
   }
 
@@ -42,23 +60,46 @@ function pickIconMeta(category: string) {
 export default function HomePage() {
   const router = useRouter();
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [categories, setCategories] = useState<SkillCategory[]>([]);
   const [loading, setLoading] = useState(true);
+  const [overview, setOverview] = useState<SiteOverview>({
+    totalSkills: 0,
+    totalDownloads: 0,
+    totalViews: 0,
+    totalUsers: 0,
+  });
 
   const [keyword, setKeyword] = useState('');
-  const [activeCategory, setActiveCategory] = useState('全部');
+  const [activeCategoryId, setActiveCategoryId] = useState(ALL_CATEGORY_ID);
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
 
   useEffect(() => {
     let mounted = true;
 
-    async function fetchSkills() {
+    async function fetchInitialData() {
       try {
         setLoading(true);
-        const response = await fetch('/api/skills?pageSize=50&sortBy=createdAt&sortOrder=desc');
-        const result = await response.json();
+        const [skillsResponse, categoriesResponse, overviewResponse] = await Promise.all([
+          fetch('/api/skills?pageSize=50&sortBy=createdAt&sortOrder=desc'),
+          fetch('/api/categories'),
+          fetch('/api/stats/overview', { cache: 'no-store' }),
+        ]);
+        const [skillsResult, categoriesResult, overviewResult] = await Promise.all([
+          skillsResponse.json(),
+          categoriesResponse.json(),
+          overviewResponse.json(),
+        ]);
 
-        if (mounted && result.success) {
-          setSkills(result.data.items || []);
+        if (mounted && skillsResult.success) {
+          setSkills(skillsResult.data.items || []);
+        }
+
+        if (mounted && categoriesResult.success) {
+          setCategories(categoriesResult.data || []);
+        }
+
+        if (mounted && overviewResult.success) {
+          setOverview(overviewResult.data);
         }
       } catch (error) {
         console.error('加载技能列表失败:', error);
@@ -69,10 +110,37 @@ export default function HomePage() {
       }
     }
 
-    fetchSkills();
+    async function refreshData() {
+      try {
+        const [skillsResponse, overviewResponse] = await Promise.all([
+          fetch('/api/skills?pageSize=50&sortBy=createdAt&sortOrder=desc', {
+            cache: 'no-store',
+          }),
+          fetch('/api/stats/overview', { cache: 'no-store' }),
+        ]);
+        const [skillsResult, overviewResult] = await Promise.all([
+          skillsResponse.json(),
+          overviewResponse.json(),
+        ]);
+
+        if (mounted && skillsResult.success) {
+          setSkills(skillsResult.data.items || []);
+        }
+
+        if (mounted && overviewResult.success) {
+          setOverview(overviewResult.data);
+        }
+      } catch (error) {
+        console.error('刷新首页数据失败:', error);
+      }
+    }
+
+    fetchInitialData();
+    const timer = setInterval(refreshData, 15000);
 
     return () => {
       mounted = false;
+      clearInterval(timer);
     };
   }, []);
 
@@ -80,8 +148,8 @@ export default function HomePage() {
     const normalizedKeyword = keyword.trim().toLowerCase();
 
     return skills.filter((skill) => {
-      const category = pickCategory(skill);
-      const categoryMatch = activeCategory === '全部' || category === activeCategory || skill.tags?.includes(activeCategory);
+      const categoryMatch =
+        activeCategoryId === ALL_CATEGORY_ID || skill.categoryId === activeCategoryId;
       const keywordMatch =
         !normalizedKeyword ||
         skill.title.toLowerCase().includes(normalizedKeyword) ||
@@ -90,7 +158,7 @@ export default function HomePage() {
 
       return categoryMatch && keywordMatch;
     });
-  }, [skills, activeCategory, keyword]);
+  }, [skills, activeCategoryId, keyword]);
 
   const hotSkills = useMemo(
     () => [...filteredSkills].sort((a, b) => b.downloadCount - a.downloadCount).slice(0, 4),
@@ -112,7 +180,20 @@ export default function HomePage() {
     [hotSkills]
   );
 
-  const rankedLabel = filteredSkills.length > 0 ? formatNumber(filteredSkills.length) : '0';
+  const rankedLabel = formatNumber(overview.totalSkills || filteredSkills.length || 0);
+
+  function openSkillModal(skill: Skill, source: string) {
+    setSelectedSkill(skill);
+    trackEvent({
+      eventName: 'skill_detail_open',
+      module: 'home',
+      action: 'open_detail_modal',
+      skillId: skill.id,
+      metadata: {
+        source,
+      },
+    });
+  }
 
   return (
     <>
@@ -123,7 +204,10 @@ export default function HomePage() {
           <br />
           <span>强大的 AI Skills</span>
         </h1>
-        <p className="hero-subtitle">在这里找到你需要的技能，或分享你创造的技能给团队</p>
+        <p className="hero-subtitle">
+          累计下载 {formatNumber(overview.totalDownloads)} 次，累计浏览{' '}
+          {formatNumber(overview.totalViews)} 次
+        </p>
       </section>
 
       <div className="search-container">
@@ -136,6 +220,14 @@ export default function HomePage() {
             onChange={(e) => setKeyword(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
+                trackEvent({
+                  eventName: 'skill_search',
+                  module: 'home',
+                  action: 'enter',
+                  metadata: {
+                    keyword,
+                  },
+                });
                 router.push(`/skills?keyword=${encodeURIComponent(keyword)}`);
               }
             }}
@@ -143,7 +235,17 @@ export default function HomePage() {
           <button
             className="search-btn"
             aria-label="搜索"
-            onClick={() => router.push(`/skills?keyword=${encodeURIComponent(keyword)}`)}
+            onClick={() => {
+              trackEvent({
+                eventName: 'skill_search',
+                module: 'home',
+                action: 'click',
+                metadata: {
+                  keyword,
+                },
+              });
+              router.push(`/skills?keyword=${encodeURIComponent(keyword)}`);
+            }}
           >
             <svg viewBox="0 0 24 24" className="search-icon">
               <circle cx="11" cy="11" r="6" />
@@ -154,13 +256,30 @@ export default function HomePage() {
       </div>
 
       <div className="categories">
-        {CATEGORY_PRESETS.map((category) => (
+        {[{ id: ALL_CATEGORY_ID, name: '全部' }, ...categories].map((category) => (
           <button
-            key={category}
-            className={`category-tag ${activeCategory === category ? 'active' : ''}`}
-            onClick={() => setActiveCategory(category)}
+            key={category.id}
+            className={`category-tag ${activeCategoryId === category.id ? 'active' : ''}`}
+            onClick={() => {
+              setActiveCategoryId(category.id);
+              trackEvent({
+                eventName: 'category_click',
+                module: 'home',
+                action: 'click',
+                categoryId: category.id === ALL_CATEGORY_ID ? undefined : category.id,
+                metadata: {
+                  categoryName: category.name,
+                },
+              });
+
+              if (category.id === ALL_CATEGORY_ID) {
+                router.push('/skills');
+                return;
+              }
+              router.push(`/skills?categoryId=${category.id}`);
+            }}
           >
-            {category}
+            {category.name}
           </button>
         ))}
       </div>
@@ -182,11 +301,19 @@ export default function HomePage() {
       <section className="content-section">
         <div className="section-header">
           <h2 className="section-title">热门推荐</h2>
-          <button className="view-all" onClick={() => router.push('/skills?sortBy=downloadCount')}>
+          <button
+            className="view-all"
+            onClick={() => router.push('/skills?sortBy=downloadCount')}
+          >
             查看全部 →
           </button>
         </div>
-        <SkillGrid loading={loading} skills={hotSkills} onOpen={setSelectedSkill} />
+        <SkillGrid
+          loading={loading}
+          skills={hotSkills}
+          source="hot"
+          onOpen={openSkillModal}
+        />
       </section>
 
       <section className="content-section">
@@ -196,7 +323,12 @@ export default function HomePage() {
             查看全部 →
           </button>
         </div>
-        <SkillGrid loading={loading} skills={newSkills} onOpen={setSelectedSkill} />
+        <SkillGrid
+          loading={loading}
+          skills={newSkills}
+          source="new"
+          onOpen={openSkillModal}
+        />
       </section>
 
       <section className="content-section" id="leaderboard">
@@ -219,7 +351,11 @@ export default function HomePage() {
                 const rankClass = index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : 'normal';
 
                 return (
-                  <div key={skill.id} className="leaderboard-item" onClick={() => setSelectedSkill(skill)}>
+                  <div
+                    key={skill.id}
+                    className="leaderboard-item"
+                    onClick={() => openSkillModal(skill, 'leaderboard')}
+                  >
                     <div className={`rank ${rankClass}`}>{index + 1}</div>
                     <div className={`skill-icon skill-icon-compact ${color}`} style={{ width: 44, height: 44 }}>
                       <SkillGlyph kind={icon} />
@@ -240,7 +376,15 @@ export default function HomePage() {
       <SkillModal
         skill={selectedSkill}
         onClose={() => setSelectedSkill(null)}
-        onJump={(id) => router.push(`/skills/${id}`)}
+        onJump={(id) => {
+          trackEvent({
+            eventName: 'skill_detail_open',
+            module: 'home',
+            action: 'jump_detail_page',
+            skillId: id,
+          });
+          router.push(`/skills/${id}`);
+        }}
       />
     </>
   );
@@ -249,11 +393,13 @@ export default function HomePage() {
 function SkillGrid({
   loading,
   skills,
+  source,
   onOpen,
 }: {
   loading: boolean;
   skills: Skill[];
-  onOpen: (skill: Skill) => void;
+  source: string;
+  onOpen: (skill: Skill, source: string) => void;
 }) {
   if (loading) {
     return (
@@ -280,7 +426,11 @@ function SkillGrid({
         const { icon, color } = pickIconMeta(category);
 
         return (
-          <article key={skill.id} className="skill-card" onClick={() => onOpen(skill)}>
+          <article
+            key={skill.id}
+            className="skill-card"
+            onClick={() => onOpen(skill, source)}
+          >
             <div className="skill-header">
               <div className={`skill-icon ${color}`}>
                 <SkillGlyph kind={icon} />
@@ -307,7 +457,7 @@ function SkillGrid({
                 className="download-btn"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onOpen(skill);
+                  onOpen(skill, `${source}-detail-button`);
                 }}
               >
                 查看详情

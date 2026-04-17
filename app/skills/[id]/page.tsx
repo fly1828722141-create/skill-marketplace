@@ -11,6 +11,8 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { message } from 'antd';
 import { Skill } from '@/types';
+import SkillReviews from '@/components/skill-reviews';
+import { getTrackingIdentity } from '@/lib/analytics-client';
 import { formatDateTime, formatFileSize, formatNumber } from '@/lib/utils';
 
 export default function SkillDetailPage() {
@@ -53,10 +55,15 @@ export default function SkillDetailPage() {
     setDownloading(true);
 
     try {
+      const identity = getTrackingIdentity();
       const response = await fetch('/api/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ skillId }),
+        body: JSON.stringify({
+          skillId,
+          anonymousId: identity.anonymousId,
+          sessionId: identity.sessionId,
+        }),
       });
 
       const result = await response.json();
@@ -75,6 +82,7 @@ export default function SkillDetailPage() {
         if (result.data.downloadCountIncremented && skill) {
           setSkill({ ...skill, downloadCount: skill.downloadCount + 1 });
         }
+
       } else {
         message.error(result.error || '下载失败');
       }
@@ -127,6 +135,9 @@ export default function SkillDetailPage() {
               <span className="meta-item">
                 🏷️ {skill.fileType.toUpperCase()}
               </span>
+              <span className="meta-item">
+                🗂️ {skill.category?.name || '未分类'}
+              </span>
             </div>
 
             <div className="skill-tags">
@@ -138,10 +149,19 @@ export default function SkillDetailPage() {
             </div>
           </div>
 
+          {skill.summary && (
+            <div className="skill-description-card">
+              <h3>✨ 功能简介</h3>
+              <p className="description-text">{skill.summary}</p>
+            </div>
+          )}
+
           <div className="skill-description-card">
             <h3>📖 技能介绍</h3>
             <p className="description-text">{skill.description}</p>
           </div>
+
+          <SkillReviews skillId={skillId} />
 
           {/* 下载记录 - 暂时隐藏，等待类型修复 
           {skill.downloads && skill.downloads.length > 0 && (

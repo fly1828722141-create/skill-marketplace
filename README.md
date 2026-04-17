@@ -10,18 +10,23 @@
 - **数据库 ORM**: Prisma
 - **数据库**: PostgreSQL
 - **文件存储**: 阿里云 OSS
-- **认证方案**: NextAuth.js + 阿里 BUC 单点登录
+- **认证方案**: NextAuth.js + Google OAuth
 - **部署平台**: 阿里云 FaaS
 
 ## 📋 功能特性
 
 ### MVP 版本（当前）
-- ✅ 用户认证（BUC 单点登录）
+- ✅ 用户认证（Google 登录）
 - ✅ Skill 包上传（支持 .zip/.tar.gz 格式）
 - ✅ Skill 包浏览和搜索
 - ✅ Skill 包详情查看
 - ✅ 下载次数统计
-- ✅ 简单的评论功能
+- ✅ Skill 分类（上传时必选）
+- ✅ 功能简介（上传时必填，至少 10 字）
+- ✅ 评价模块（文字 + 图片）
+- ✅ 评价点赞与高赞置顶
+- ✅ 访问/点击埋点与数据看板（`/dashboard`）
+- ✅ 全站真实统计（总 Skill、总下载、总浏览）
 
 ### 后续规划
 - ⏳ 用户积分系统
@@ -51,11 +56,14 @@ cp env.example.txt .env.local
 # 生成 Prisma 客户端
 npm run db:generate
 
-# 推送数据库结构（开发环境）
+# 本地开发（SQLite）快速同步
 npm run db:push
 
-# 或者运行迁移（生产环境）
+# 生产环境（PostgreSQL）开发迁移
 npm run db:migrate
+
+# 生产部署执行迁移（推荐）
+npx prisma migrate deploy
 
 # 插入种子数据（可选）
 npm run db:seed
@@ -86,8 +94,9 @@ npm run build
 在 FaaS 平台的环境设置中配置：
 - DATABASE_URL（数据库连接串）
 - OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET
-- BUC_APP_KEY / BUC_APP_SECRET
+- GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
 - NEXTAUTH_SECRET
+- POSTHOG_HOST / POSTHOG_PROJECT_API_KEY（可选，用于外部看板）
 
 ### 4. 发布上线
 

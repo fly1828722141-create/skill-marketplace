@@ -231,6 +231,42 @@ button {
   box-shadow: 0 8px 24px rgba(0, 122, 255, 0.4);
 }
 
+.auth-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.auth-loading {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.auth-user-name {
+  max-width: 140px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.logout-btn {
+  background: #fff;
+  color: var(--text-secondary);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.logout-btn:hover {
+  border-color: rgba(0, 122, 255, 0.4);
+  color: var(--primary);
+}
+
 .main-content {
   position: relative;
   z-index: 1;
@@ -999,6 +1035,264 @@ button {
   box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.12);
 }
 
+.textarea {
+  resize: vertical;
+  min-height: 96px;
+}
+
+.loading-page {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.empty-state {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.skill-description-card {
+  background: #fff;
+  border-radius: var(--radius-md);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 20px;
+}
+
+/* 评论模块 */
+.review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.review-tip {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.review-form {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.review-form-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.review-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.review-images-uploaded {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.review-image-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(0, 122, 255, 0.08);
+  font-size: 12px;
+}
+
+.link-btn {
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  cursor: pointer;
+}
+
+.review-list {
+  margin-top: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.review-item {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.review-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.review-author {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.review-author-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.review-author-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.review-author-time {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.review-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.review-rating-badge {
+  font-size: 12px;
+  background: rgba(0, 122, 255, 0.1);
+  color: var(--primary);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.review-like-btn {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #fff;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.review-like-btn.active {
+  border-color: rgba(0, 122, 255, 0.3);
+  color: var(--primary);
+  background: rgba(0, 122, 255, 0.08);
+}
+
+.review-content {
+  margin-top: 10px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.review-image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.review-image-link {
+  display: block;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.review-image {
+  width: 100%;
+  height: 90px;
+  object-fit: cover;
+  display: block;
+}
+
+/* 数据看板 */
+.dashboard-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.dashboard-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.dashboard-card {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.88);
+  padding: 14px;
+}
+
+.dashboard-card h3 {
+  margin-bottom: 10px;
+}
+
+.stat-card .stat-title {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.stat-card .stat-value {
+  margin-top: 8px;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.dashboard-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.dashboard-table th,
+.dashboard-table td {
+  padding: 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  text-align: left;
+  font-size: 14px;
+}
+
+.dashboard-table th {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
 /* 加载骨架 */
 .skeleton {
   background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
@@ -1037,6 +1331,11 @@ button {
   .upload-btn {
     padding: 10px 14px;
     font-size: 13px;
+  }
+
+  .auth-user-name,
+  .logout-btn {
+    display: none;
   }
 
   .hero {

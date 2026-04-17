@@ -7,7 +7,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadFile, validateFile } from '@/lib/oss';
 import prisma from '@/lib/prisma';
-import { getPublicUser } from '@/lib/public-user';
+import { getCurrentUser } from '@/lib/auth';
+import { ensureDefaultCategories } from '@/lib/skill-categories';
+import { recordEvent } from '@/lib/event-log';
 import { successResponse, errorResponse, sanitizeFileName } from '@/lib/utils';
 import { normalizeTagsFromDb, parseTagsInput, toPrismaTagsValue } from '@/lib/tags';
 
@@ -16,19 +18,34 @@ import { normalizeTagsFromDb, parseTagsInput, toPrismaTagsValue } from '@/lib/ta
 // ===========================================
 export async function POST(request: NextRequest) {
   try {
-    const publicUser = await getPublicUser();
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json(
+        errorResponse('请先登录后再上传 Skill', 'UNAUTHORIZED'),
+        { status: 401 }
+      );
+    }
 
     // 解析 FormData
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const title = formData.get('title') as string;
+    const summary = formData.get('summary') as string;
     const description = formData.get('description') as string;
+    const categoryId = formData.get('categoryId') as string;
     const tagsInput = formData.get('tags');
 
     // 验证必填字段
-    if (!file || !title || !description) {
+    if (!file || !title || !summary || !description || !categoryId) {
       return NextResponse.json(
         errorResponse('缺少必填字段', 'VALIDATION_ERROR'),
+        { status: 400 }
+      );
+    }
+
+    if (summary.trim().length < 10) {
+      return NextResponse.json(
+        errorResponse('功能简介至少 10 个字', 'VALIDATION_ERROR'),
         { status: 400 }
       );
     }
@@ -51,20 +68,38 @@ export async function POST(request: NextRequest) {
     const uniqueFileName = `${Date.now()}-${safeFileName}`;
 
     const tags = parseTagsInput(tagsInput);
+    await ensureDefaultCategories();
+
+    const category = await prisma.skillCategory.findUnique({
+      where: { id: categoryId },
+      select: { id: true, status: true },
+    });
+
+    if (!category || category.status !== 'active') {
+      return NextResponse.json(
+        errorResponse('请选择有效的 Skill 分类', 'VALIDATION_ERROR'),
+        { status: 400 }
+      );
+    }
 
     // 上传到 OSS
     const uploadResult = await uploadFile(buffer, uniqueFileName, file.type);
+    const normalizedFileType = file.name.toLowerCase().endsWith('.tar.gz')
+      ? 'tar.gz'
+      : file.name.split('.').pop() || '';
 
     // 创建技能包记录
     const skill = await prisma.skill.create({
       data: {
         title,
+        summary: summary.trim(),
         description,
+        categoryId: category.id,
         tags: toPrismaTagsValue(tags, prisma) as any,
         fileName: uploadResult.fileName,
         fileSize: uploadResult.fileSize,
-        fileType: file.name.split('.').pop() || '',
-        authorId: publicUser.id,
+        fileType: normalizedFileType,
+        authorId: currentUser.id,
         status: 'active',
       },
       include: {
@@ -76,6 +111,14 @@ export async function POST(request: NextRequest) {
             avatar: true,
           },
         },
+        category: {
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+            icon: true,
+          },
+        },
       },
     });
 
@@ -83,6 +126,20 @@ export async function POST(request: NextRequest) {
       ...skill,
       tags: normalizeTagsFromDb(skill.tags),
     };
+
+    await recordEvent({
+      eventName: 'skill_upload_success',
+      page: '/upload',
+      module: 'upload',
+      action: 'create',
+      userId: currentUser.id,
+      skillId: skill.id,
+      categoryId: skill.categoryId,
+      metadata: {
+        fileType: normalizedFileType,
+        fileSize: uploadResult.fileSize,
+      },
+    });
 
     return NextResponse.json(
       successResponse(
