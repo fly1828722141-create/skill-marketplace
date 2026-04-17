@@ -18,29 +18,54 @@ export const DEFAULT_SKILL_CATEGORIES: DefaultSkillCategory[] = [
 ];
 
 export async function ensureDefaultCategories() {
-  const upserted = await Promise.all(
-    DEFAULT_SKILL_CATEGORIES.map((category) =>
-      prisma.skillCategory.upsert({
+  const syncedCategories = await Promise.all(
+    DEFAULT_SKILL_CATEGORIES.map(async (category) => {
+      const existingBySlug = await prisma.skillCategory.findUnique({
         where: { slug: category.slug },
-        update: {
-          name: category.name,
-          icon: category.icon,
-          sortOrder: category.sortOrder,
-          status: 'active',
-        },
-        create: {
+      });
+
+      if (existingBySlug) {
+        return prisma.skillCategory.update({
+          where: { id: existingBySlug.id },
+          data: {
+            name: category.name,
+            icon: category.icon,
+            sortOrder: category.sortOrder,
+            status: 'active',
+          },
+        });
+      }
+
+      const existingByName = await prisma.skillCategory.findUnique({
+        where: { name: category.name },
+      });
+
+      if (existingByName) {
+        return prisma.skillCategory.update({
+          where: { id: existingByName.id },
+          data: {
+            slug: category.slug,
+            icon: category.icon,
+            sortOrder: category.sortOrder,
+            status: 'active',
+          },
+        });
+      }
+
+      return prisma.skillCategory.create({
+        data: {
           slug: category.slug,
           name: category.name,
           icon: category.icon,
           sortOrder: category.sortOrder,
           status: 'active',
         },
-      })
-    )
+      });
+    })
   );
 
   const defaultSlugSet = new Set(DEFAULT_SKILL_CATEGORIES.map((item) => item.slug));
-  const otherCategory = upserted.find((item) => item.slug === 'others');
+  const otherCategory = syncedCategories.find((item) => item.slug === 'others');
 
   const legacyCategories = await prisma.skillCategory.findMany({
     where: {
@@ -58,38 +83,42 @@ export async function ensureDefaultCategories() {
     return;
   }
 
-  const legacyCategoryIds = legacyCategories.map((item) => item.id);
+  try {
+    const legacyCategoryIds = legacyCategories.map((item) => item.id);
 
-  await prisma.skill.updateMany({
-    where: {
-      categoryId: {
-        in: legacyCategoryIds,
+    await prisma.skill.updateMany({
+      where: {
+        categoryId: {
+          in: legacyCategoryIds,
+        },
       },
-    },
-    data: {
-      categoryId: otherCategory.id,
-    },
-  });
+      data: {
+        categoryId: otherCategory.id,
+      },
+    });
 
-  await prisma.eventLog.updateMany({
-    where: {
-      categoryId: {
-        in: legacyCategoryIds,
+    await prisma.eventLog.updateMany({
+      where: {
+        categoryId: {
+          in: legacyCategoryIds,
+        },
       },
-    },
-    data: {
-      categoryId: otherCategory.id,
-    },
-  });
+      data: {
+        categoryId: otherCategory.id,
+      },
+    });
 
-  await prisma.skillCategory.updateMany({
-    where: {
-      id: {
-        in: legacyCategoryIds,
+    await prisma.skillCategory.updateMany({
+      where: {
+        id: {
+          in: legacyCategoryIds,
+        },
       },
-    },
-    data: {
-      status: 'inactive',
-    },
-  });
+      data: {
+        status: 'inactive',
+      },
+    });
+  } catch (error) {
+    console.error('归并历史分类失败，但不影响分类查询:', error);
+  }
 }

@@ -11,7 +11,11 @@ export const revalidate = 0;
 // ===========================================
 export async function GET() {
   try {
-    await ensureDefaultCategories();
+    try {
+      await ensureDefaultCategories();
+    } catch (error) {
+      console.error('初始化默认分类失败，继续返回现有分类:', error);
+    }
 
     const categories = await prisma.skillCategory.findMany({
       where: { status: 'active' },
