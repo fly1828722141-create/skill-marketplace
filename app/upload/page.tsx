@@ -159,293 +159,249 @@ export default function UploadPage() {
     }
   }
 
+  const summaryLength = formData.summary.trim().length;
+  const selectedCategoryName =
+    categories.find((item) => item.id === formData.categoryId)?.name || '未选择';
+
   if (status === 'loading' || googleEnabled === null) {
     return <div className="loading-page">登录状态检查中...</div>;
   }
 
   if (googleEnabled && !session?.user) {
     return (
-      <div className="upload-page">
-        <div className="upload-form" style={{ textAlign: 'center' }}>
-          <h2>登录后可上传 Skill</h2>
-          <p style={{ marginBottom: 20, color: 'var(--text-secondary)' }}>
-            请先使用 Google 账号登录，再提交 Skill 内容与文件。
-          </p>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => router.push('/login')}
-          >
-            使用 Google 登录
-          </button>
-        </div>
+      <div className="upload-studio">
+        <section className="hero upload-hero">
+          <div className="hero-badge">创作中心</div>
+          <h1 className="hero-title">
+            发布你的 <span>Skill</span>
+          </h1>
+          <p className="hero-subtitle">统一沉淀团队方法论，让复用真正发生。</p>
+        </section>
+
+        <section className="content-section">
+          <div className="upload-guard-card">
+            <h2>登录后可上传 Skill</h2>
+            <p>请先使用 Google 账号登录，再提交 Skill 内容与文件。</p>
+            <button
+              type="button"
+              className="btn btn-primary upload-submit-btn"
+              onClick={() => router.push('/login')}
+            >
+              使用 Google 登录
+            </button>
+          </div>
+        </section>
       </div>
     );
   }
 
   return (
-    <div className="upload-page">
-      <div className="upload-header">
-        <h1>📤 上传技能包</h1>
-        <p>分享你的技能，帮助更多同学成长</p>
-      </div>
+    <div className="upload-studio">
+      <section className="hero upload-hero">
+        <div className="hero-badge">创作中心</div>
+        <h1 className="hero-title">
+          发布你的 <span>Skill</span>
+        </h1>
+        <p className="hero-subtitle">把你的实战方案打包，让更多同学一键复用。</p>
+      </section>
 
-      <form onSubmit={handleSubmit} className="upload-form">
-        <div className="form-section">
-          <h3>基本信息</h3>
-          
-          <div className="form-group">
-            <label htmlFor="title">
-              标题 <span className="required">*</span>
-            </label>
-            <input
-              id="title"
-              type="text"
-              className="input"
-              placeholder="例如：Next.js 14 入门教程"
-              value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              required
-            />
-          </div>
+      <section className="content-section">
+        <div className="upload-layout">
+          <form onSubmit={handleSubmit} className="upload-form-card">
+            <div className="upload-section">
+              <div className="upload-section-head">
+                <h2>基本信息</h2>
+                <p>清晰的信息能让别人更快理解并下载你的 Skill。</p>
+              </div>
 
-          <div className="form-group">
-            <label htmlFor="summary">
-              功能简介 <span className="required">*</span>
-            </label>
-            <textarea
-              id="summary"
-              className="input textarea"
-              placeholder="至少 10 个字，说明这个 Skill 能解决什么问题..."
-              rows={3}
-              value={formData.summary}
-              onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
-              required
-            />
-            <p className="help-text">
-              已输入 {formData.summary.trim().length} 字（至少 10 字）
-            </p>
-          </div>
+              <div className="form-group">
+                <label htmlFor="title">
+                  标题 <span className="required">*</span>
+                </label>
+                <input
+                  id="title"
+                  type="text"
+                  className="input"
+                  placeholder="例如：Next.js 14 入门教程"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  required
+                />
+              </div>
 
-          <div className="form-group">
-            <label htmlFor="categoryId">
-              Skill 类型 <span className="required">*</span>
-            </label>
-            <select
-              id="categoryId"
-              className="input"
-              value={formData.categoryId}
-              onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-              disabled={categoriesLoading}
-              required
-            >
-              {categoriesLoading ? (
-                <option value="">加载分类中...</option>
-              ) : categories.length === 0 ? (
-                <option value="">暂无可用分类</option>
-              ) : (
-                categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))
-              )}
-            </select>
-          </div>
+              <div className="form-group">
+                <label htmlFor="summary">
+                  功能简介 <span className="required">*</span>
+                </label>
+                <textarea
+                  id="summary"
+                  className="input textarea"
+                  placeholder="至少 10 个字，说明这个 Skill 能解决什么问题..."
+                  rows={3}
+                  value={formData.summary}
+                  onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
+                  required
+                />
+                <p className="help-text">
+                  已输入 {summaryLength} 字（至少 10 字）
+                </p>
+              </div>
 
-          <div className="form-group">
-            <label htmlFor="description">
-              描述 <span className="required">*</span>
-            </label>
-            <textarea
-              id="description"
-              className="input textarea"
-              placeholder="详细介绍你的技能包内容、适用场景、使用方法等..."
-              rows={6}
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              required
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="tags">标签</label>
-            <input
-              id="tags"
-              type="text"
-              className="input"
-              placeholder="用逗号分隔，例如：Next.js, React, TypeScript"
-              value={formData.tags}
-              onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-            />
-            <p className="help-text">标签有助于其他人搜索到你的技能包</p>
-          </div>
-        </div>
-
-        <div className="form-section">
-          <h3>文件上传</h3>
-          
-          <div className="form-group">
-            <label htmlFor="file">
-              技能包文件 <span className="required">*</span>
-            </label>
-            <div className="file-upload-area">
-              <input
-                id="file"
-                type="file"
-                className="file-input"
-                accept=".zip,.tar.gz,.rar,.7z"
-                onChange={handleFileChange}
-                disabled={loading}
-              />
-              {file && (
-                <div className="file-info">
-                  <span className="file-name">📄 {file.name}</span>
-                  <span className="file-size">{formatFileSize(file.size)}</span>
+              <div className="form-row-two">
+                <div className="form-group">
+                  <label htmlFor="categoryId">
+                    Skill 类型 <span className="required">*</span>
+                  </label>
+                  <select
+                    id="categoryId"
+                    className="input"
+                    value={formData.categoryId}
+                    onChange={(e) =>
+                      setFormData({ ...formData, categoryId: e.target.value })
+                    }
+                    disabled={categoriesLoading}
+                    required
+                  >
+                    {categoriesLoading ? (
+                      <option value="">加载分类中...</option>
+                    ) : categories.length === 0 ? (
+                      <option value="">暂无可用分类</option>
+                    ) : (
+                      categories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
                 </div>
-              )}
+
+                <div className="form-group">
+                  <label htmlFor="tags">标签</label>
+                  <input
+                    id="tags"
+                    type="text"
+                    className="input"
+                    placeholder="例如：Next.js, React, TypeScript"
+                    value={formData.tags}
+                    onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                  />
+                  <p className="help-text">标签有助于搜索和推荐。</p>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="description">
+                  描述 <span className="required">*</span>
+                </label>
+                <textarea
+                  id="description"
+                  className="input textarea"
+                  placeholder="详细介绍技能包内容、适用场景、使用方法等..."
+                  rows={7}
+                  value={formData.description}
+                  onChange={(e) =>
+                    setFormData({ ...formData, description: e.target.value })
+                  }
+                  required
+                />
+              </div>
             </div>
-            <p className="help-text">
-              支持格式：.zip, .tar.gz, .rar, .7z | 最大 50MB
-            </p>
-          </div>
+
+            <div className="upload-section">
+              <div className="upload-section-head">
+                <h2>文件上传</h2>
+                <p>支持压缩包格式，单文件最大 50MB。</p>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="file">
+                  技能包文件 <span className="required">*</span>
+                </label>
+                <label
+                  htmlFor="file"
+                  className={`upload-dropzone ${file ? 'is-selected' : ''}`}
+                >
+                  <span className="upload-drop-icon" aria-hidden="true">
+                    ⇪
+                  </span>
+                  <span className="upload-drop-title">
+                    {file ? '文件已就绪，点击可重新选择' : '点击选择 Skill 文件'}
+                  </span>
+                  <span className="upload-drop-subtitle">
+                    支持 .zip / .tar.gz / .rar / .7z
+                  </span>
+                </label>
+                <input
+                  id="file"
+                  type="file"
+                  className="upload-hidden-input"
+                  accept=".zip,.tar.gz,.rar,.7z"
+                  onChange={handleFileChange}
+                  disabled={loading}
+                />
+                {file && (
+                  <div className="upload-file-chip">
+                    <span className="upload-file-name">{file.name}</span>
+                    <span className="upload-file-size">{formatFileSize(file.size)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="form-actions upload-form-actions">
+                <button
+                  type="submit"
+                  className="btn btn-primary upload-submit-btn"
+                  disabled={loading || !file}
+                >
+                  {loading ? '上传中...' : '确认上传'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary upload-cancel-btn"
+                  onClick={() => router.back()}
+                  disabled={loading}
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <aside className="upload-side-panel">
+            <div className="upload-panel-card">
+              <h3>发布预览</h3>
+              <div className="upload-panel-stat">
+                <span>当前分类</span>
+                <strong>{selectedCategoryName}</strong>
+              </div>
+              <div className="upload-panel-stat">
+                <span>简介字数</span>
+                <strong>{summaryLength}</strong>
+              </div>
+              <div className="upload-panel-stat">
+                <span>标签数量</span>
+                <strong>
+                  {formData.tags
+                    .split(',')
+                    .map((tag) => tag.trim())
+                    .filter(Boolean).length}
+                </strong>
+              </div>
+            </div>
+
+            <div className="upload-panel-card">
+              <h3>发布小贴士</h3>
+              <ul className="upload-panel-list">
+                <li>标题建议 8-24 字，突出可解决的问题。</li>
+                <li>简介写清“适用人群 + 产出结果”。</li>
+                <li>描述补充使用步骤，下载后更容易上手。</li>
+                <li>上传前先本地解压自测，减少坏包率。</li>
+              </ul>
+            </div>
+          </aside>
         </div>
-
-        <div className="form-actions">
-          <button
-            type="submit"
-            className="btn btn-primary btn-large"
-            disabled={loading || !file}
-          >
-            {loading ? '上传中...' : '确认上传'}
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => router.back()}
-            disabled={loading}
-          >
-            取消
-          </button>
-        </div>
-      </form>
-
-      <style jsx>{`
-        .upload-page {
-          max-width: 800px;
-          margin: 0 auto;
-        }
-
-        .upload-header {
-          margin-bottom: var(--spacing-xl);
-        }
-
-        .upload-header h1 {
-          font-size: 28px;
-          margin-bottom: var(--spacing-xs);
-        }
-
-        .upload-header p {
-          color: var(--text-secondary);
-          font-size: 16px;
-        }
-
-        .upload-form {
-          background: white;
-          border-radius: var(--radius-md);
-          padding: var(--spacing-lg);
-          box-shadow: var(--shadow-sm);
-        }
-
-        .form-section {
-          margin-bottom: var(--spacing-xl);
-        }
-
-        .form-section h3 {
-          font-size: 18px;
-          margin-bottom: var(--spacing-md);
-          color: var(--primary-color);
-        }
-
-        .form-group {
-          margin-bottom: var(--spacing-md);
-        }
-
-        .form-group label {
-          display: block;
-          margin-bottom: var(--spacing-xs);
-          font-weight: 500;
-        }
-
-        .required {
-          color: var(--error-color);
-        }
-
-        .textarea {
-          resize: vertical;
-          font-family: inherit;
-        }
-
-        .help-text {
-          font-size: 12px;
-          color: var(--text-tertiary);
-          margin-top: var(--spacing-xs);
-        }
-
-        .file-upload-area {
-          border: 2px dashed var(--border-color);
-          border-radius: var(--radius-md);
-          padding: var(--spacing-lg);
-          text-align: center;
-          transition: border-color 0.2s;
-        }
-
-        .file-upload-area:hover {
-          border-color: var(--primary-color);
-        }
-
-        .file-input {
-          display: block;
-          margin: 0 auto;
-        }
-
-        .file-info {
-          margin-top: var(--spacing-sm);
-          padding: var(--spacing-sm);
-          background-color: var(--bg-secondary);
-          border-radius: var(--radius-sm);
-        }
-
-        .file-name {
-          display: block;
-          font-weight: 500;
-          margin-bottom: var(--spacing-xs);
-        }
-
-        .file-size {
-          font-size: 13px;
-          color: var(--text-secondary);
-        }
-
-        .loading-page {
-          text-align: center;
-          padding: 48px 0;
-          color: var(--text-secondary);
-        }
-
-        .form-actions {
-          display: flex;
-          gap: var(--spacing-md);
-          padding-top: var(--spacing-lg);
-          border-top: 1px solid var(--border-color);
-        }
-
-        .btn-large {
-          padding: var(--spacing-md) var(--spacing-xl);
-          min-width: 120px;
-        }
-
-      `}</style>
+      </section>
     </div>
   );
 }

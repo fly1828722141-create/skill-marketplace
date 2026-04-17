@@ -1221,6 +1221,275 @@ button {
   display: block;
 }
 
+/* 上传页 */
+.upload-studio {
+  padding-bottom: 36px;
+}
+
+.upload-hero {
+  padding-top: 70px;
+  padding-bottom: 44px;
+}
+
+.upload-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 22px;
+  align-items: start;
+}
+
+.upload-form-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 26px;
+  backdrop-filter: blur(18px);
+  display: grid;
+  gap: 18px;
+}
+
+.upload-section {
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(247, 250, 255, 0.9) 100%);
+  border-radius: 18px;
+  padding: 22px;
+}
+
+.upload-section-head {
+  margin-bottom: 14px;
+}
+
+.upload-section-head h2 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  margin-bottom: 6px;
+}
+
+.upload-section-head p {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.upload-form-card .form-group {
+  margin-bottom: 15px;
+}
+
+.upload-form-card .form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.upload-form-card .required {
+  color: #ff3b30;
+}
+
+.upload-form-card .help-text {
+  margin-top: 7px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.upload-form-card .input {
+  border-radius: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.upload-form-card .textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.form-row-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.upload-dropzone {
+  border: 2px dashed rgba(0, 122, 255, 0.3);
+  background: linear-gradient(135deg, rgba(0, 122, 255, 0.06) 0%, rgba(90, 200, 250, 0.06) 100%);
+  border-radius: 16px;
+  min-height: 138px;
+  padding: 16px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.upload-dropzone:hover {
+  transform: translateY(-2px);
+  border-color: rgba(0, 122, 255, 0.55);
+  box-shadow: 0 10px 24px rgba(0, 122, 255, 0.12);
+}
+
+.upload-dropzone.is-selected {
+  border-color: rgba(52, 199, 89, 0.65);
+  background: linear-gradient(135deg, rgba(52, 199, 89, 0.1) 0%, rgba(48, 209, 88, 0.08) 100%);
+}
+
+.upload-drop-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: var(--primary);
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(0, 122, 255, 0.18);
+}
+
+.upload-drop-title {
+  margin-top: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.upload-drop-subtitle {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.upload-hidden-input {
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.upload-file-chip {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-radius: 12px;
+  padding: 9px 12px;
+  border: 1px solid rgba(0, 122, 255, 0.2);
+  background: rgba(0, 122, 255, 0.07);
+}
+
+.upload-file-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.upload-file-size {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.upload-form-actions {
+  border-top: 0;
+  padding-top: 2px;
+  display: flex;
+  gap: 10px;
+}
+
+.upload-submit-btn {
+  min-width: 140px;
+  border-radius: 12px;
+  padding: 12px 18px;
+  box-shadow: 0 10px 22px rgba(0, 122, 255, 0.23);
+}
+
+.upload-cancel-btn {
+  min-width: 92px;
+  border-radius: 12px;
+}
+
+.upload-side-panel {
+  position: sticky;
+  top: 112px;
+  display: grid;
+  gap: 12px;
+}
+
+.upload-panel-card {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.96) 0%, rgba(240, 248, 255, 0.92) 100%);
+  border: 1px solid rgba(0, 122, 255, 0.16);
+  border-radius: 18px;
+  box-shadow: var(--shadow-sm);
+  padding: 16px 18px;
+}
+
+.upload-panel-card h3 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.upload-panel-stat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px dashed rgba(0, 0, 0, 0.1);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.upload-panel-stat:last-child {
+  border-bottom: 0;
+}
+
+.upload-panel-stat strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.upload-panel-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.upload-guard-card {
+  max-width: 560px;
+  margin: 0 auto;
+  text-align: center;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 36px 30px;
+}
+
+.upload-guard-card h2 {
+  font-size: 30px;
+  margin-bottom: 10px;
+  letter-spacing: -0.5px;
+}
+
+.upload-guard-card p {
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+  font-size: 15px;
+}
+
 /* 数据看板 */
 .dashboard-page {
   max-width: 1200px;
@@ -1367,6 +1636,48 @@ button {
 
   .leaderboard-section {
     padding: 24px;
+  }
+
+  .upload-hero {
+    padding-top: 48px;
+    padding-bottom: 28px;
+  }
+
+  .upload-layout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .upload-form-card {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .upload-section {
+    padding: 16px;
+    border-radius: 14px;
+  }
+
+  .upload-section-head h2 {
+    font-size: 20px;
+  }
+
+  .form-row-two {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .upload-side-panel {
+    position: static;
+  }
+
+  .upload-form-actions {
+    flex-wrap: wrap;
+  }
+
+  .upload-submit-btn,
+  .upload-cancel-btn {
+    width: 100%;
   }
 
   .footer {
