@@ -25,12 +25,16 @@ interface SiteOverview {
 }
 
 const CATEGORY_ICON: Record<string, { icon: IconKind; color: string }> = {
+  数据分析与研究: { icon: 'data', color: 'blue' },
   '数据分析与 BI': { icon: 'data', color: 'blue' },
+  内容写作与营销: { icon: 'content', color: 'purple' },
   内容写作与翻译: { icon: 'content', color: 'purple' },
   办公效率与自动化: { icon: 'office', color: 'green' },
+  开发与编程: { icon: 'dev', color: 'orange' },
   开发工具: { icon: 'dev', color: 'orange' },
   开发工具与工程: { icon: 'dev', color: 'orange' },
   设计与多媒体: { icon: 'image', color: 'pink' },
+  客服与销售运营: { icon: 'marketing', color: 'teal' },
   营销与增长: { icon: 'marketing', color: 'teal' },
   运营与客服: { icon: 'marketing', color: 'teal' },
   '销售与 CRM': { icon: 'marketing', color: 'teal' },
@@ -38,6 +42,7 @@ const CATEGORY_ICON: Record<string, { icon: IconKind; color: string }> = {
   教育与知识管理: { icon: 'content', color: 'green' },
   行业场景解决方案: { icon: 'marketing', color: 'teal' },
   工作流模板与编排: { icon: 'office', color: 'green' },
+  其他: { icon: 'generic', color: 'blue' },
   默认: { icon: 'generic', color: 'blue' },
 };
 
