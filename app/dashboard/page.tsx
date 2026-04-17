@@ -76,32 +76,9 @@ interface DashboardData {
 export default function DashboardPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
-  const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null);
   const [days, setDays] = useState(7);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-
-    async function fetchProviders() {
-      try {
-        const response = await fetch('/api/auth/providers', { cache: 'no-store' });
-        const providers = await response.json();
-        if (!mounted) return;
-        setGoogleEnabled(Boolean(providers?.google));
-      } catch (error) {
-        if (!mounted) return;
-        setGoogleEnabled(false);
-      }
-    }
-
-    fetchProviders();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -131,12 +108,12 @@ export default function DashboardPage() {
       }
     }
 
-    if (googleEnabled === false || session?.user) {
+    if (session?.user) {
       fetchDashboard();
     }
 
     const timer = setInterval(() => {
-      if (googleEnabled === false || session?.user) {
+      if (session?.user) {
         fetchDashboard();
       }
     }, 30000);
@@ -145,13 +122,13 @@ export default function DashboardPage() {
       mounted = false;
       clearInterval(timer);
     };
-  }, [days, session?.user, googleEnabled]);
+  }, [days, session?.user]);
 
-  if (status === 'loading' || googleEnabled === null) {
+  if (status === 'loading') {
     return <div className="loading-page">加载中...</div>;
   }
 
-  if (googleEnabled && !session?.user) {
+  if (!session?.user) {
     return (
       <div className="dashboard-page">
         <div className="dashboard-card" style={{ textAlign: 'center' }}>

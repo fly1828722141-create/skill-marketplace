@@ -33,10 +33,10 @@ function getOSSConstructor(): OSSConstructor {
 
 // OSS 配置
 const ossConfig = {
-  region: process.env.OSS_REGION || 'oss-cn-hangzhou',
-  accessKeyId: process.env.OSS_ACCESS_KEY_ID || '',
-  accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET || '',
-  bucket: process.env.OSS_BUCKET || 'skill-marketplace',
+  region: (process.env.OSS_REGION || 'oss-cn-hangzhou').trim(),
+  accessKeyId: (process.env.OSS_ACCESS_KEY_ID || '').trim(),
+  accessKeySecret: (process.env.OSS_ACCESS_KEY_SECRET || '').trim(),
+  bucket: (process.env.OSS_BUCKET || 'skill-marketplace').trim(),
 };
 
 // 创建 OSS 客户端实例

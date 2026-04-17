@@ -3,12 +3,16 @@ import GoogleProvider from 'next-auth/providers/google';
 import prisma from '@/lib/prisma';
 import { recordEvent } from '@/lib/event-log';
 
-const googleClientId = process.env.GOOGLE_CLIENT_ID;
-const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+function readEnv(name: string): string {
+  return (process.env[name] || '').trim();
+}
+
+const googleClientId = readEnv('GOOGLE_CLIENT_ID');
+const googleClientSecret = readEnv('GOOGLE_CLIENT_SECRET');
 export const isGoogleAuthEnabled = Boolean(googleClientId && googleClientSecret);
 const authSecret =
-  process.env.NEXTAUTH_SECRET ||
-  process.env.AUTH_SECRET ||
+  readEnv('NEXTAUTH_SECRET') ||
+  readEnv('AUTH_SECRET') ||
   'skill-marketplace-fallback-secret';
 
 export const authOptions: NextAuthOptions = {

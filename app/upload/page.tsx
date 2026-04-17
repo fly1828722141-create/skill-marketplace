@@ -17,7 +17,6 @@ export default function UploadPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [loading, setLoading] = useState(false);
-  const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null);
   const [categories, setCategories] = useState<SkillCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [formData, setFormData] = useState({
@@ -31,18 +30,6 @@ export default function UploadPage() {
 
   useEffect(() => {
     let mounted = true;
-
-    async function fetchProviders() {
-      try {
-        const response = await fetch('/api/auth/providers', { cache: 'no-store' });
-        const providers = await response.json();
-        if (!mounted) return;
-        setGoogleEnabled(Boolean(providers?.google));
-      } catch (error) {
-        if (!mounted) return;
-        setGoogleEnabled(false);
-      }
-    }
 
     async function fetchCategories() {
       const fallbackCategories = getFallbackSkillCategories();
@@ -88,7 +75,6 @@ export default function UploadPage() {
       }
     }
 
-    fetchProviders();
     fetchCategories();
 
     return () => {
@@ -189,7 +175,7 @@ export default function UploadPage() {
   const selectedCategoryName =
     categories.find((item) => item.id === formData.categoryId)?.name || '未选择';
 
-  if (status === 'loading' || googleEnabled === null) {
+  if (status === 'loading') {
     return <div className="loading-page">登录状态检查中...</div>;
   }
 
@@ -207,18 +193,13 @@ export default function UploadPage() {
         <section className="content-section">
           <div className="upload-guard-card">
             <h2>登录后可上传 Skill</h2>
-            <p>
-              {googleEnabled
-                ? '请先使用 Google 账号登录，再提交 Skill 内容与文件。'
-                : '当前站点尚未配置 Google 登录，请先在环境变量中配置 GOOGLE_CLIENT_ID 与 GOOGLE_CLIENT_SECRET。'}
-            </p>
+            <p>请先使用 Google 账号登录，再提交 Skill 内容与文件。</p>
             <button
               type="button"
               className="btn btn-primary upload-submit-btn"
-              disabled={!googleEnabled}
               onClick={() => router.push('/login')}
             >
-              {googleEnabled ? '使用 Google 登录' : '等待管理员配置登录'}
+              使用 Google 登录
             </button>
           </div>
         </section>

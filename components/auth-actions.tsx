@@ -1,48 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { signOut, useSession } from 'next-auth/react';
 
 export default function AuthActions() {
   const { data: session, status } = useSession();
-  const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-
-    async function loadProviders() {
-      try {
-        const response = await fetch('/api/auth/providers', { cache: 'no-store' });
-        const providers = await response.json();
-        if (!mounted) return;
-        setGoogleEnabled(Boolean(providers?.google));
-      } catch (error) {
-        if (!mounted) return;
-        setGoogleEnabled(false);
-      }
-    }
-
-    loadProviders();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  if (status === 'loading' || googleEnabled === null) {
+  if (status === 'loading') {
     return <div className="auth-loading">加载中...</div>;
   }
 
   if (!session?.user) {
-    if (!googleEnabled) {
-      return (
-        <span className="upload-btn" aria-disabled="true" title="请先配置 Google OAuth">
-          登录未配置
-        </span>
-      );
-    }
-
     return (
       <Link href="/login" className="upload-btn">
         Google 登录
