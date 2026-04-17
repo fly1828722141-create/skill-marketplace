@@ -66,7 +66,8 @@ export default function LoginPage() {
         ) : (
           <>
             <p>
-              当前站点未配置 Google OAuth，已自动切换为访客可用模式。
+              当前站点未配置 Google OAuth，请先配置 <code>GOOGLE_CLIENT_ID</code> 与{' '}
+              <code>GOOGLE_CLIENT_SECRET</code> 后再登录。
             </p>
             <button
               type="button"

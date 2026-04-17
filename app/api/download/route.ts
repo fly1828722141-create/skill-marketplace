@@ -23,6 +23,13 @@ export async function POST(request: NextRequest) {
     const { skillId, anonymousId, sessionId } = body;
     const currentUser = await getCurrentUser();
 
+    if (!currentUser) {
+      return NextResponse.json(
+        errorResponse('请先登录 Google 账号后下载 Skill', 'UNAUTHORIZED'),
+        { status: 401 }
+      );
+    }
+
     if (!skillId) {
       return NextResponse.json(
         errorResponse('缺少技能包 ID', 'VALIDATION_ERROR'),
@@ -42,7 +49,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 游客模式下，每次点击都计一次下载
+    // 已登录用户每次点击都计一次下载
     await prisma.skill.update({
       where: { id: skillId },
       data: {
@@ -52,40 +59,37 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    let downloadedBefore = false;
-    if (currentUser) {
-      const existingDownload = await prisma.download.findUnique({
+    const existingDownload = await prisma.download.findUnique({
+      where: {
+        userId_skillId: {
+          userId: currentUser.id,
+          skillId,
+        },
+      },
+      select: { id: true },
+    });
+
+    const downloadedBefore = Boolean(existingDownload);
+
+    if (existingDownload) {
+      await prisma.download.update({
         where: {
           userId_skillId: {
             userId: currentUser.id,
             skillId,
           },
         },
-        select: { id: true },
+        data: {
+          downloadedAt: new Date(),
+        },
       });
-
-      downloadedBefore = Boolean(existingDownload);
-
-      if (existingDownload) {
-        await prisma.download.update({
-          where: {
-            userId_skillId: {
-              userId: currentUser.id,
-              skillId,
-            },
-          },
-          data: {
-            downloadedAt: new Date(),
-          },
-        });
-      } else {
-        await prisma.download.create({
-          data: {
-            userId: currentUser.id,
-            skillId,
-          },
-        });
-      }
+    } else {
+      await prisma.download.create({
+        data: {
+          userId: currentUser.id,
+          skillId,
+        },
+      });
     }
 
     await recordEvent({
@@ -93,7 +97,7 @@ export async function POST(request: NextRequest) {
       page: '/skills/[id]',
       module: 'skill-detail',
       action: 'download',
-      userId: currentUser?.id ?? null,
+      userId: currentUser.id,
       skillId,
       anonymousId: typeof anonymousId === 'string' ? anonymousId : null,
       sessionId: typeof sessionId === 'string' ? sessionId : null,

@@ -7,9 +7,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { message } from 'antd';
+import { useSession } from 'next-auth/react';
 import { Skill } from '@/types';
 import SkillReviews from '@/components/skill-reviews';
 import { getTrackingIdentity } from '@/lib/analytics-client';
@@ -17,6 +18,8 @@ import { formatDateTime, formatFileSize, formatNumber } from '@/lib/utils';
 
 export default function SkillDetailPage() {
   const params = useParams();
+  const router = useRouter();
+  const { data: session, status } = useSession();
   const [skill, setSkill] = useState<Skill | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
@@ -52,6 +55,17 @@ export default function SkillDetailPage() {
   // 下载处理
   // ===========================================
   async function handleDownload() {
+    if (status === 'loading') {
+      message.info('正在检查登录状态，请稍后再试');
+      return;
+    }
+
+    if (!session?.user) {
+      message.warning('请先登录 Google 账号后再下载');
+      router.push('/login');
+      return;
+    }
+
     setDownloading(true);
 
     try {

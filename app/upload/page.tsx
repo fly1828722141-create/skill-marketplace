@@ -102,6 +102,12 @@ export default function UploadPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
+    if (!session?.user) {
+      message.warning('请先登录 Google 账号后再上传');
+      router.push('/login');
+      return;
+    }
+
     if (!file) {
       message.error('请选择要上传的文件');
       return;
@@ -187,7 +193,7 @@ export default function UploadPage() {
     return <div className="loading-page">登录状态检查中...</div>;
   }
 
-  if (googleEnabled && !session?.user) {
+  if (!session?.user) {
     return (
       <div className="upload-studio">
         <section className="hero upload-hero">
@@ -201,13 +207,18 @@ export default function UploadPage() {
         <section className="content-section">
           <div className="upload-guard-card">
             <h2>登录后可上传 Skill</h2>
-            <p>请先使用 Google 账号登录，再提交 Skill 内容与文件。</p>
+            <p>
+              {googleEnabled
+                ? '请先使用 Google 账号登录，再提交 Skill 内容与文件。'
+                : '当前站点尚未配置 Google 登录，请先在环境变量中配置 GOOGLE_CLIENT_ID 与 GOOGLE_CLIENT_SECRET。'}
+            </p>
             <button
               type="button"
               className="btn btn-primary upload-submit-btn"
+              disabled={!googleEnabled}
               onClick={() => router.push('/login')}
             >
-              使用 Google 登录
+              {googleEnabled ? '使用 Google 登录' : '等待管理员配置登录'}
             </button>
           </div>
         </section>

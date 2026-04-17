@@ -37,9 +37,9 @@ export default function AuthActions() {
   if (!session?.user) {
     if (!googleEnabled) {
       return (
-        <Link href="/upload" className="upload-btn">
-          + 上传 Skill
-        </Link>
+        <span className="upload-btn" aria-disabled="true" title="请先配置 Google OAuth">
+          登录未配置
+        </span>
       );
     }
 
