@@ -1,18 +1,39 @@
 import { NextAuthOptions, getServerSession } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
+import CredentialsProvider from 'next-auth/providers/credentials';
 import prisma from '@/lib/prisma';
 import { recordEvent } from '@/lib/event-log';
+import { getPublicUser } from '@/lib/public-user';
+
+const googleClientId = process.env.GOOGLE_CLIENT_ID;
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+const isGoogleAuthEnabled = Boolean(googleClientId && googleClientSecret);
+const authSecret =
+  process.env.NEXTAUTH_SECRET ||
+  process.env.AUTH_SECRET ||
+  'skill-marketplace-fallback-secret';
 
 export const authOptions: NextAuthOptions = {
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: authSecret,
   session: {
     strategy: 'jwt',
   },
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || 'missing-google-client-id',
-      clientSecret:
-        process.env.GOOGLE_CLIENT_SECRET || 'missing-google-client-secret',
+    ...(isGoogleAuthEnabled
+      ? [
+          GoogleProvider({
+            clientId: googleClientId as string,
+            clientSecret: googleClientSecret as string,
+          }),
+        ]
+      : []),
+    CredentialsProvider({
+      id: 'public-mode',
+      name: 'Public Mode',
+      credentials: {},
+      async authorize() {
+        return null;
+      },
     }),
   ],
   pages: {
@@ -104,6 +125,10 @@ export async function getAuthSession() {
 }
 
 export async function getCurrentUser() {
+  if (!isGoogleAuthEnabled) {
+    return getPublicUser();
+  }
+
   const session = await getAuthSession();
 
   if (!session?.user) {

@@ -1,24 +1,52 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { signIn, signOut, useSession } from 'next-auth/react';
+import { signOut, useSession } from 'next-auth/react';
 
 export default function AuthActions() {
   const { data: session, status } = useSession();
+  const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null);
 
-  if (status === 'loading') {
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadProviders() {
+      try {
+        const response = await fetch('/api/auth/providers', { cache: 'no-store' });
+        const providers = await response.json();
+        if (!mounted) return;
+        setGoogleEnabled(Boolean(providers?.google));
+      } catch (error) {
+        if (!mounted) return;
+        setGoogleEnabled(false);
+      }
+    }
+
+    loadProviders();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  if (status === 'loading' || googleEnabled === null) {
     return <div className="auth-loading">加载中...</div>;
   }
 
   if (!session?.user) {
+    if (!googleEnabled) {
+      return (
+        <Link href="/upload" className="upload-btn">
+          + 上传 Skill
+        </Link>
+      );
+    }
+
     return (
-      <button
-        type="button"
-        className="upload-btn"
-        onClick={() => signIn('google', { callbackUrl: '/upload' })}
-      >
+      <Link href="/login" className="upload-btn">
         Google 登录
-      </button>
+      </Link>
     );
   }
 

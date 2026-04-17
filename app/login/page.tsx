@@ -1,12 +1,35 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signIn, useSession } from 'next-auth/react';
 
 export default function LoginPage() {
   const router = useRouter();
   const { status } = useSession();
+  const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadProviders() {
+      try {
+        const response = await fetch('/api/auth/providers', { cache: 'no-store' });
+        const providers = await response.json();
+        if (!mounted) return;
+        setGoogleEnabled(Boolean(providers?.google));
+      } catch (error) {
+        if (!mounted) return;
+        setGoogleEnabled(false);
+      }
+    }
+
+    loadProviders();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -14,18 +37,46 @@ export default function LoginPage() {
     }
   }, [router, status]);
 
+  if (googleEnabled === null) {
+    return (
+      <div className="login-page">
+        <div className="login-card">
+          <h1>登录有求必应屋</h1>
+          <p>正在检查登录配置...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="login-page">
       <div className="login-card">
         <h1>登录有求必应屋</h1>
-        <p>使用 Google 账号登录后即可上传 Skill。</p>
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => signIn('google', { callbackUrl: '/' })}
-        >
-          使用 Google 登录
-        </button>
+        {googleEnabled ? (
+          <>
+            <p>使用 Google 账号登录后即可上传 Skill。</p>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => signIn('google', { callbackUrl: '/' })}
+            >
+              使用 Google 登录
+            </button>
+          </>
+        ) : (
+          <>
+            <p>
+              当前站点未配置 Google OAuth，已自动切换为访客可用模式。
+            </p>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => router.push('/')}
+            >
+              返回首页
+            </button>
+          </>
+        )}
       </div>
 
       <style jsx>{`

@@ -9,13 +9,14 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { message } from 'antd';
-import { signIn, useSession } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 import { SkillCategory } from '@/types';
 
 export default function UploadPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [loading, setLoading] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null);
   const [categories, setCategories] = useState<SkillCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [formData, setFormData] = useState({
@@ -29,6 +30,18 @@ export default function UploadPage() {
 
   useEffect(() => {
     let mounted = true;
+
+    async function fetchProviders() {
+      try {
+        const response = await fetch('/api/auth/providers', { cache: 'no-store' });
+        const providers = await response.json();
+        if (!mounted) return;
+        setGoogleEnabled(Boolean(providers?.google));
+      } catch (error) {
+        if (!mounted) return;
+        setGoogleEnabled(false);
+      }
+    }
 
     async function fetchCategories() {
       try {
@@ -55,6 +68,7 @@ export default function UploadPage() {
       }
     }
 
+    fetchProviders();
     fetchCategories();
 
     return () => {
@@ -145,11 +159,11 @@ export default function UploadPage() {
     }
   }
 
-  if (status === 'loading') {
+  if (status === 'loading' || googleEnabled === null) {
     return <div className="loading-page">登录状态检查中...</div>;
   }
 
-  if (!session?.user) {
+  if (googleEnabled && !session?.user) {
     return (
       <div className="upload-page">
         <div className="upload-form" style={{ textAlign: 'center' }}>
@@ -157,7 +171,11 @@ export default function UploadPage() {
           <p style={{ marginBottom: 20, color: 'var(--text-secondary)' }}>
             请先使用 Google 账号登录，再提交 Skill 内容与文件。
           </p>
-          <button type="button" className="btn btn-primary" onClick={() => signIn('google', { callbackUrl: '/upload' })}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => router.push('/login')}
+          >
             使用 Google 登录
           </button>
         </div>

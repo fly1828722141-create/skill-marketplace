@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { signIn, useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { message } from 'antd';
 import { formatNumber } from '@/lib/utils';
 
@@ -73,10 +74,34 @@ interface DashboardData {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { data: session, status } = useSession();
+  const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null);
   const [days, setDays] = useState(7);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function fetchProviders() {
+      try {
+        const response = await fetch('/api/auth/providers', { cache: 'no-store' });
+        const providers = await response.json();
+        if (!mounted) return;
+        setGoogleEnabled(Boolean(providers?.google));
+      } catch (error) {
+        if (!mounted) return;
+        setGoogleEnabled(false);
+      }
+    }
+
+    fetchProviders();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -106,12 +131,12 @@ export default function DashboardPage() {
       }
     }
 
-    if (session?.user) {
+    if (googleEnabled === false || session?.user) {
       fetchDashboard();
     }
 
     const timer = setInterval(() => {
-      if (session?.user) {
+      if (googleEnabled === false || session?.user) {
         fetchDashboard();
       }
     }, 30000);
@@ -120,13 +145,13 @@ export default function DashboardPage() {
       mounted = false;
       clearInterval(timer);
     };
-  }, [days, session?.user]);
+  }, [days, session?.user, googleEnabled]);
 
-  if (status === 'loading') {
+  if (status === 'loading' || googleEnabled === null) {
     return <div className="loading-page">加载中...</div>;
   }
 
-  if (!session?.user) {
+  if (googleEnabled && !session?.user) {
     return (
       <div className="dashboard-page">
         <div className="dashboard-card" style={{ textAlign: 'center' }}>
@@ -134,7 +159,7 @@ export default function DashboardPage() {
           <button
             type="button"
             className="btn btn-primary"
-            onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
+            onClick={() => router.push('/login')}
           >
             使用 Google 登录
           </button>

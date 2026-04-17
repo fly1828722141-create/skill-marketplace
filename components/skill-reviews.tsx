@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { message } from 'antd';
-import { useSession, signIn } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 import { formatDateTime, formatNumber } from '@/lib/utils';
 
 interface ReviewImage {
@@ -39,6 +40,7 @@ interface ReviewListResponse {
 const MAX_REVIEW_IMAGES = 4;
 
 export default function SkillReviews({ skillId }: { skillId: string }) {
+  const router = useRouter();
   const { data: session } = useSession();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -98,7 +100,7 @@ export default function SkillReviews({ skillId }: { skillId: string }) {
     event.preventDefault();
 
     if (!session?.user) {
-      signIn('google', { callbackUrl: `/skills/${skillId}` });
+      router.push('/login');
       return;
     }
 
@@ -143,7 +145,7 @@ export default function SkillReviews({ skillId }: { skillId: string }) {
 
   async function toggleLike(reviewId: string) {
     if (!session?.user) {
-      signIn('google', { callbackUrl: `/skills/${skillId}` });
+      router.push('/login');
       return;
     }
 
