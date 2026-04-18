@@ -20,6 +20,10 @@ type OSSConstructor = new (options: {
 
 let cachedOSSConstructor: OSSConstructor | null = null;
 
+function readEnv(name: string, fallback: string = ''): string {
+  return (process.env[name] || fallback).trim();
+}
+
 function getOSSConstructor(): OSSConstructor {
   if (!cachedOSSConstructor) {
     // 延迟加载 ali-oss，避免构建阶段提前执行第三方库初始化
@@ -33,15 +37,20 @@ function getOSSConstructor(): OSSConstructor {
 
 // OSS 配置
 const ossConfig = {
-  region: (process.env.OSS_REGION || 'oss-cn-hangzhou').trim(),
-  accessKeyId: (process.env.OSS_ACCESS_KEY_ID || '').trim(),
-  accessKeySecret: (process.env.OSS_ACCESS_KEY_SECRET || '').trim(),
-  bucket: (process.env.OSS_BUCKET || 'skill-marketplace').trim(),
+  region: readEnv('OSS_REGION', 'oss-cn-hangzhou'),
+  accessKeyId: readEnv('OSS_ACCESS_KEY_ID') || readEnv('ALIBABA_CLOUD_ACCESS_KEY_ID'),
+  accessKeySecret:
+    readEnv('OSS_ACCESS_KEY_SECRET') || readEnv('ALIBABA_CLOUD_ACCESS_KEY_SECRET'),
+  bucket: readEnv('OSS_BUCKET', 'skill-marketplace'),
 };
+
+export function isOSSConfigured(): boolean {
+  return Boolean(ossConfig.accessKeyId && ossConfig.accessKeySecret);
+}
 
 // 创建 OSS 客户端实例
 export function getOSSClient() {
-  if (!ossConfig.accessKeyId || !ossConfig.accessKeySecret) {
+  if (!isOSSConfigured()) {
     throw new Error('OSS 配置缺失，请检查环境变量');
   }
   const OSS = getOSSConstructor();

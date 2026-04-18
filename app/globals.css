@@ -1006,6 +1006,13 @@ button {
   cursor: pointer;
 }
 
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  box-shadow: none;
+  transform: none;
+}
+
 .btn-primary {
   background: var(--primary);
   color: #fff;
@@ -1404,6 +1411,17 @@ button {
   gap: 10px;
 }
 
+.upload-config-banner {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 59, 48, 0.28);
+  background: rgba(255, 59, 48, 0.08);
+  color: #a10f0f;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .upload-submit-btn {
   min-width: 140px;
   border-radius: 12px;
@@ -1411,9 +1429,20 @@ button {
   box-shadow: 0 10px 22px rgba(0, 122, 255, 0.23);
 }
 
+.upload-submit-btn:disabled {
+  background: rgba(125, 144, 171, 0.72);
+  color: rgba(255, 255, 255, 0.95);
+}
+
 .upload-cancel-btn {
   min-width: 92px;
   border-radius: 12px;
+}
+
+.upload-submit-hint {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .upload-side-panel {

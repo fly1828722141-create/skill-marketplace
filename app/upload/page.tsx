@@ -17,6 +17,7 @@ export default function UploadPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [loading, setLoading] = useState(false);
+  const [ossConfigured, setOssConfigured] = useState<boolean | null>(null);
   const [categories, setCategories] = useState<SkillCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [formData, setFormData] = useState({
@@ -82,6 +83,30 @@ export default function UploadPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+
+    async function checkUploadConfig() {
+      try {
+        const response = await fetch('/api/upload/config');
+        const result = await response.json();
+        if (!mounted) return;
+        setOssConfigured(Boolean(result?.success && result?.data?.ossConfigured));
+      } catch (error) {
+        console.warn('上传配置检查失败，默认按已配置处理:', error);
+        if (mounted) {
+          setOssConfigured(true);
+        }
+      }
+    }
+
+    checkUploadConfig();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   // ===========================================
   // 表单提交处理
   // ===========================================
@@ -91,6 +116,11 @@ export default function UploadPage() {
     if (!session?.user) {
       message.warning('请先登录 Google 账号后再上传');
       router.push('/login');
+      return;
+    }
+
+    if (ossConfigured === false) {
+      message.error('上传服务暂未配置完成，请联系管理员设置 OSS 密钥');
       return;
     }
 
@@ -127,13 +157,13 @@ export default function UploadPage() {
         body: uploadData,
       });
 
-      const result = await response.json();
+      const result = await response.json().catch(() => null);
 
-      if (result.success) {
+      if (response.ok && result?.success) {
         message.success('上传成功！');
         router.push(`/skills/${result.data.skill.id}`);
       } else {
-        message.error(result.error || '上传失败');
+        message.error(result?.error || '上传失败，请稍后重试');
       }
     } catch (error: any) {
       console.error('上传失败:', error);
@@ -174,6 +204,22 @@ export default function UploadPage() {
   const summaryLength = formData.summary.trim().length;
   const selectedCategoryName =
     categories.find((item) => item.id === formData.categoryId)?.name || '未选择';
+  const submitBlockedReason =
+    ossConfigured === false
+      ? '上传服务配置中：缺少 OSS 存储密钥，请联系管理员'
+      : !formData.title.trim()
+      ? '请先填写标题'
+      : summaryLength < 10
+      ? '功能简介至少 10 个字'
+      : categoriesLoading
+      ? '分类加载中，请稍候...'
+      : !formData.categoryId
+      ? '请先选择 Skill 类型'
+      : !formData.description.trim()
+      ? '请先填写描述'
+      : !file
+      ? '请先选择 Skill 压缩包文件（.zip/.tar.gz/.rar/.7z）'
+      : null;
 
   if (status === 'loading') {
     return <div className="loading-page">登录状态检查中...</div>;
@@ -326,6 +372,12 @@ export default function UploadPage() {
                 <p>支持压缩包格式，单文件最大 50MB。</p>
               </div>
 
+              {ossConfigured === false ? (
+                <div className="upload-config-banner" role="alert">
+                  上传服务尚未配置完成，当前环境缺少 OSS 密钥，暂时无法提交上传。
+                </div>
+              ) : null}
+
               <div className="form-group">
                 <label htmlFor="file">
                   技能包文件 <span className="required">*</span>
@@ -364,7 +416,7 @@ export default function UploadPage() {
                 <button
                   type="submit"
                   className="btn btn-primary upload-submit-btn"
-                  disabled={loading || !file}
+                  disabled={loading || Boolean(submitBlockedReason)}
                 >
                   {loading ? '上传中...' : '确认上传'}
                 </button>
@@ -377,6 +429,9 @@ export default function UploadPage() {
                   取消
                 </button>
               </div>
+              {submitBlockedReason ? (
+                <p className="upload-submit-hint">{submitBlockedReason}</p>
+              ) : null}
             </div>
           </form>
 
