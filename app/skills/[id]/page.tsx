@@ -1,12 +1,10 @@
 /**
- * 技能包详情页
- * 
- * 展示技能包详细信息、下载按钮、作者信息等
+ * 技能包详情页（文档化展示）
  */
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { message } from 'antd';
@@ -15,6 +13,14 @@ import { Skill } from '@/types';
 import SkillReviews from '@/components/skill-reviews';
 import { getTrackingIdentity } from '@/lib/analytics-client';
 import { formatDateTime, formatFileSize, formatNumber } from '@/lib/utils';
+
+type DocBlock =
+  | { type: 'heading'; level: 1 | 2 | 3; text: string }
+  | { type: 'paragraph'; text: string }
+  | { type: 'list'; ordered: boolean; items: string[] }
+  | { type: 'quote'; text: string }
+  | { type: 'code'; code: string }
+  | { type: 'divider' };
 
 export default function SkillDetailPage() {
   const params = useParams();
@@ -25,13 +31,7 @@ export default function SkillDetailPage() {
   const [downloading, setDownloading] = useState(false);
 
   const skillId = params.id as string;
-  const isExternalLinkSkill =
-    !!skill &&
-    (skill.fileType?.toLowerCase() === 'link' || /^https?:\/\//i.test(skill.fileName));
 
-  // ===========================================
-  // 加载技能包详情
-  // ===========================================
   useEffect(() => {
     async function fetchSkill() {
       try {
@@ -54,9 +54,18 @@ export default function SkillDetailPage() {
     fetchSkill();
   }, [skillId]);
 
-  // ===========================================
-  // 下载处理
-  // ===========================================
+  const isExternalLinkSkill =
+    !!skill &&
+    (skill.fileType?.toLowerCase() === 'link' || /^https?:\/\//i.test(skill.fileName));
+  const sourceUrl =
+    isExternalLinkSkill && skill && isHttpUrl(skill.fileName) ? skill.fileName : null;
+  const sourceHost = sourceUrl ? safeHost(sourceUrl) : '';
+  const installCommand = sourceUrl ? buildInstallCommand(sourceUrl, skill?.title || '') : '';
+  const docBlocks = useMemo(
+    () => parseDocBlocks(skill?.description || ''),
+    [skill?.description]
+  );
+
   async function handleDownload() {
     if (status === 'loading') {
       message.info('正在检查登录状态，请稍后再试');
@@ -86,7 +95,6 @@ export default function SkillDetailPage() {
       const result = await response.json();
 
       if (result.success) {
-        // 打开下载链接
         window.open(result.data.downloadUrl, '_blank');
 
         if (isExternalLinkSkill) {
@@ -97,11 +105,9 @@ export default function SkillDetailPage() {
           message.info('开始下载（已下载过此技能包）');
         }
 
-        // 更新本地下载次数
         if (result.data.downloadCountIncremented && skill) {
           setSkill({ ...skill, downloadCount: skill.downloadCount + 1 });
         }
-
       } else {
         message.error(result.error || '下载失败');
       }
@@ -121,14 +127,15 @@ export default function SkillDetailPage() {
     return (
       <div className="error-page">
         <h2>❌ 技能包不存在</h2>
-        <Link href="/" className="btn btn-primary">返回首页</Link>
+        <Link href="/" className="btn btn-primary">
+          返回首页
+        </Link>
       </div>
     );
   }
 
   return (
     <div className="skill-detail-page">
-      {/* 面包屑导航 */}
       <nav className="breadcrumb">
         <Link href="/">首页</Link>
         <span> / </span>
@@ -137,26 +144,30 @@ export default function SkillDetailPage() {
         <span>{skill.title}</span>
       </nav>
 
-      {/* 主要内容 */}
       <div className="skill-content">
-        {/* 左侧：技能包信息 */}
         <div className="skill-main">
           <div className="skill-header-card">
-            <h1 className="skill-title">{skill.title}</h1>
-            
+            <div className="skill-header-top">
+              <h1 className="skill-title">{skill.title}</h1>
+              {sourceUrl ? (
+                <a
+                  href={sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="source-pill"
+                >
+                  来源：{sourceHost || '外部链接'}
+                </a>
+              ) : null}
+            </div>
+
             <div className="skill-meta">
+              <span className="meta-item">📅 {formatDateTime(skill.createdAt)}</span>
               <span className="meta-item">
-                📅 {formatDateTime(skill.createdAt)}
+                {isExternalLinkSkill ? '🔗 外部链接' : `📦 ${formatFileSize(skill.fileSize)}`}
               </span>
-              <span className="meta-item">
-                {isExternalLinkSkill ? `🔗 外部链接` : `📦 ${formatFileSize(skill.fileSize)}`}
-              </span>
-              <span className="meta-item">
-                🏷️ {(skill.fileType || 'link').toUpperCase()}
-              </span>
-              <span className="meta-item">
-                🗂️ {skill.category?.name || '未分类'}
-              </span>
+              <span className="meta-item">🏷️ {(skill.fileType || 'link').toUpperCase()}</span>
+              <span className="meta-item">🗂️ {skill.category?.name || '未分类'}</span>
             </div>
 
             <div className="skill-tags">
@@ -168,46 +179,33 @@ export default function SkillDetailPage() {
             </div>
           </div>
 
-          {skill.summary && (
+          {installCommand ? (
+            <div className="install-card">
+              <div className="install-label">INSTALLATION</div>
+              <pre className="install-code">
+                <code>{installCommand}</code>
+              </pre>
+            </div>
+          ) : null}
+
+          {skill.summary ? (
             <div className="skill-description-card">
               <h3>✨ 功能简介</h3>
               <p className="description-text">{skill.summary}</p>
             </div>
-          )}
+          ) : null}
 
-          <div className="skill-description-card">
-            <h3>📖 技能介绍</h3>
-            <p className="description-text">{skill.description}</p>
+          <div className="skill-description-card doc-surface">
+            <div className="doc-surface-head">
+              <h3>SKILL.md</h3>
+              <span>结构化展示</span>
+            </div>
+            <DocRenderer blocks={docBlocks} />
           </div>
 
           <SkillReviews skillId={skillId} />
-
-          {/* 下载记录 - 暂时隐藏，等待类型修复 
-          {skill.downloads && skill.downloads.length > 0 && (
-            <div className="downloads-card">
-              <h3>📥 最近下载 ({skill.downloadCount})</h3>
-              <div className="downloads-list">
-                {skill.downloads.slice(0, 10).map((download) => (
-                  <div key={download.id} className="download-item">
-                    {download.user.avatar && (
-                      <img
-                        src={download.user.avatar}
-                        alt={download.user.name}
-                        className="user-avatar"
-                      />
-                    )}
-                    <span className="user-name">{download.user.name}</span>
-                    <span className="download-time">
-                      {formatTime(download.downloadedAt)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )} */}
         </div>
 
-        {/* 右侧：操作卡片 */}
         <aside className="skill-sidebar">
           <div className="action-card">
             <button
@@ -234,45 +232,41 @@ export default function SkillDetailPage() {
             </div>
           </div>
 
-          {/* 作者信息 */}
           <div className="author-card">
             <h3>👤 作者</h3>
-            {skill.author && (
+            {skill.author ? (
               <div className="author-info">
-                {skill.author.avatar && (
+                {skill.author.avatar ? (
                   <img
                     src={skill.author.avatar}
                     alt={skill.author.name}
                     className="author-avatar"
                   />
-                )}
+                ) : null}
                 <div className="author-details">
                   <div className="author-name">{skill.author.name}</div>
-                  {skill.author.department && (
-                    <div className="author-dept">{skill.author.department}</div>
-                  )}
+                  <div className="author-dept">{skill.author.department || 'external'}</div>
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
-
         </aside>
       </div>
 
       <style jsx>{`
         .skill-detail-page {
-          max-width: 1200px;
+          max-width: 1260px;
           margin: 0 auto;
         }
 
         .breadcrumb {
-          margin-bottom: var(--spacing-lg);
+          margin-bottom: 18px;
           color: var(--text-secondary);
           font-size: 14px;
         }
 
         .breadcrumb a {
-          color: var(--primary-color);
+          color: var(--primary);
           text-decoration: none;
         }
 
@@ -282,8 +276,9 @@ export default function SkillDetailPage() {
 
         .skill-content {
           display: grid;
-          grid-template-columns: 1fr 320px;
-          gap: var(--spacing-lg);
+          grid-template-columns: minmax(0, 1fr) 320px;
+          gap: 18px;
+          align-items: flex-start;
         }
 
         .skill-main {
@@ -291,187 +286,618 @@ export default function SkillDetailPage() {
         }
 
         .skill-header-card,
-        .skill-description-card,
-        .downloads-card {
-          background: white;
-          border-radius: var(--radius-md);
-          padding: var(--spacing-lg);
+        .skill-description-card {
+          background: rgba(255, 255, 255, 0.9);
+          border: 1px solid rgba(255, 255, 255, 0.65);
+          border-radius: 20px;
+          padding: 20px 22px;
           box-shadow: var(--shadow-sm);
-          margin-bottom: var(--spacing-lg);
+          margin-bottom: 14px;
+        }
+
+        .skill-header-top {
+          display: flex;
+          gap: 14px;
+          align-items: flex-start;
+          justify-content: space-between;
+          margin-bottom: 10px;
         }
 
         .skill-title {
-          font-size: 28px;
-          margin-bottom: var(--spacing-md);
-          line-height: 1.4;
+          font-size: 46px;
+          line-height: 1.05;
+          letter-spacing: -0.8px;
+          margin: 0;
+          word-break: break-word;
+        }
+
+        .source-pill {
+          flex-shrink: 0;
+          border-radius: 999px;
+          padding: 8px 12px;
+          font-size: 12px;
+          font-weight: 600;
+          color: #11407f;
+          background: rgba(0, 122, 255, 0.12);
+          border: 1px solid rgba(0, 122, 255, 0.2);
+          text-decoration: none;
+        }
+
+        .source-pill:hover {
+          background: rgba(0, 122, 255, 0.18);
         }
 
         .skill-meta {
           display: flex;
-          gap: var(--spacing-md);
+          gap: 10px;
           flex-wrap: wrap;
-          margin-bottom: var(--spacing-md);
-          color: var(--text-secondary);
-          font-size: 14px;
+          margin-bottom: 10px;
+        }
+
+        .meta-item {
+          font-size: 13px;
+          color: #4f6079;
+          border-radius: 999px;
+          padding: 6px 10px;
+          background: rgba(84, 120, 170, 0.09);
+          border: 1px solid rgba(84, 120, 170, 0.16);
         }
 
         .skill-tags {
-          margin-top: var(--spacing-md);
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .tag {
+          padding: 5px 10px;
+          border-radius: 999px;
+          font-size: 12px;
+          background: rgba(0, 122, 255, 0.08);
+          color: #1058b5;
+          border: 1px solid rgba(0, 122, 255, 0.18);
+        }
+
+        .install-card {
+          border-radius: 18px;
+          background: radial-gradient(
+              ellipse at top right,
+              rgba(75, 127, 255, 0.22),
+              rgba(15, 17, 28, 0.22) 42%
+            ),
+            linear-gradient(180deg, #101317 0%, #0a0d11 100%);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          box-shadow: 0 22px 50px rgba(0, 0, 0, 0.28);
+          padding: 16px 18px;
+          margin-bottom: 14px;
+          color: #f0f5ff;
+        }
+
+        .install-label {
+          font-size: 12px;
+          letter-spacing: 1.6px;
+          text-transform: uppercase;
+          color: rgba(226, 235, 255, 0.72);
+          margin-bottom: 10px;
+        }
+
+        .install-code {
+          margin: 0;
+          border-radius: 12px;
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          padding: 12px 14px;
+          overflow-x: auto;
+        }
+
+        .install-code code {
+          font-size: 17px;
+          color: #f5f8ff;
+          font-family: 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', monospace;
         }
 
         .description-text {
-          line-height: 1.8;
-          color: var(--text-primary);
-          white-space: pre-wrap;
+          font-size: 18px;
+          line-height: 1.75;
+          color: #2c3b4f;
+          margin-top: 8px;
         }
 
-        .downloads-list {
-          margin-top: var(--spacing-md);
+        .doc-surface {
+          padding-top: 16px;
         }
 
-        .download-item {
+        .doc-surface-head {
           display: flex;
-          align-items: center;
-          gap: var(--spacing-sm);
-          padding: var(--spacing-sm) 0;
-          border-bottom: 1px solid var(--border-color);
+          align-items: baseline;
+          justify-content: space-between;
+          border-bottom: 1px solid rgba(12, 30, 64, 0.1);
+          padding-bottom: 10px;
+          margin-bottom: 14px;
         }
 
-        .download-item:last-child {
-          border-bottom: none;
+        .doc-surface-head h3 {
+          font-size: 19px;
+          margin: 0;
         }
 
-        .user-avatar {
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-        }
-
-        .user-name {
-          flex: 1;
-          font-size: 14px;
-        }
-
-        .download-time {
+        .doc-surface-head span {
           font-size: 12px;
-          color: var(--text-tertiary);
+          color: var(--text-secondary);
         }
 
-        .action-card {
-          background: white;
-          border-radius: var(--radius-md);
-          padding: var(--spacing-lg);
+        .action-card,
+        .author-card {
+          background: rgba(255, 255, 255, 0.9);
+          border: 1px solid rgba(255, 255, 255, 0.65);
+          border-radius: 18px;
+          padding: 16px;
           box-shadow: var(--shadow-sm);
-          margin-bottom: var(--spacing-lg);
-          text-align: center;
+          margin-bottom: 12px;
         }
 
         .btn-download {
           width: 100%;
-          padding: var(--spacing-md);
+          min-height: 44px;
+          border-radius: 12px;
           font-size: 16px;
-          margin-bottom: var(--spacing-lg);
+          margin-bottom: 12px;
         }
 
         .stats-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: var(--spacing-md);
+          gap: 10px;
         }
 
         .stat-item {
           text-align: center;
-          padding: var(--spacing-sm);
-          background-color: var(--bg-secondary);
-          border-radius: var(--radius-sm);
+          border-radius: 12px;
+          padding: 10px;
+          background: rgba(5, 30, 70, 0.04);
+          border: 1px solid rgba(5, 30, 70, 0.08);
         }
 
         .stat-value {
-          font-size: 20px;
-          font-weight: 600;
-          color: var(--primary-color);
+          font-size: 24px;
+          line-height: 1.2;
+          font-weight: 700;
+          color: #0f3f82;
         }
 
         .stat-label {
           font-size: 12px;
           color: var(--text-secondary);
-          margin-top: var(--spacing-xs);
-        }
-
-        .author-card {
-          background: white;
-          border-radius: var(--radius-md);
-          padding: var(--spacing-lg);
-          box-shadow: var(--shadow-sm);
-          margin-bottom: var(--spacing-lg);
+          margin-top: 3px;
         }
 
         .author-card h3 {
-          margin-bottom: var(--spacing-md);
+          margin-bottom: 10px;
         }
 
         .author-info {
           display: flex;
+          gap: 10px;
           align-items: center;
-          gap: var(--spacing-md);
         }
 
         .author-avatar {
-          width: 48px;
-          height: 48px;
-          border-radius: 50%;
+          width: 42px;
+          height: 42px;
+          border-radius: 999px;
+          object-fit: cover;
         }
 
         .author-name {
-          font-weight: 500;
-          font-size: 16px;
+          font-weight: 700;
         }
 
         .author-dept {
-          font-size: 13px;
           color: var(--text-secondary);
-          margin-top: var(--spacing-xs);
+          font-size: 12px;
         }
 
-        .author-actions {
-          background: white;
-          border-radius: var(--radius-md);
-          padding: var(--spacing-lg);
-          box-shadow: var(--shadow-sm);
-        }
-
-        .author-actions h3 {
-          margin-bottom: var(--spacing-md);
-        }
-
-        .btn-block {
-          width: 100%;
-          margin-bottom: var(--spacing-sm);
-        }
-
-        .loading-page,
-        .error-page {
-          text-align: center;
-          padding: var(--spacing-xl);
-          background: white;
-          border-radius: var(--radius-md);
-          box-shadow: var(--shadow-md);
-        }
-
-        .error-page h2 {
-          margin-bottom: var(--spacing-md);
-        }
-
-        @media (max-width: 768px) {
+        @media (max-width: 1080px) {
           .skill-content {
             grid-template-columns: 1fr;
           }
 
           .skill-sidebar {
-            order: -1;
+            position: static;
+          }
+        }
+
+        @media (max-width: 680px) {
+          .skill-title {
+            font-size: 30px;
+          }
+
+          .skill-header-top {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
+          .meta-item {
+            font-size: 12px;
+          }
+
+          .install-code code {
+            font-size: 14px;
+          }
+
+          .description-text {
+            font-size: 16px;
           }
         }
       `}</style>
     </div>
   );
+}
+
+function DocRenderer({ blocks }: { blocks: DocBlock[] }) {
+  if (blocks.length === 0) {
+    return <p className="doc-paragraph">暂无文档内容</p>;
+  }
+
+  return (
+    <div className="doc-content">
+      {blocks.map((block, idx) => {
+        const key = `${block.type}-${idx}`;
+
+        if (block.type === 'heading') {
+          const HeadingTag = block.level === 1 ? 'h2' : block.level === 2 ? 'h3' : 'h4';
+          return (
+            <HeadingTag key={key} className={`doc-heading doc-heading-l${block.level}`}>
+              {renderInline(block.text, `${key}-heading`)}
+            </HeadingTag>
+          );
+        }
+
+        if (block.type === 'paragraph') {
+          return (
+            <p key={key} className="doc-paragraph">
+              {renderInline(block.text, `${key}-p`)}
+            </p>
+          );
+        }
+
+        if (block.type === 'list') {
+          const ListTag = block.ordered ? 'ol' : 'ul';
+          return (
+            <ListTag key={key} className={`doc-list ${block.ordered ? 'ordered' : 'unordered'}`}>
+              {block.items.map((item, itemIdx) => (
+                <li key={`${key}-item-${itemIdx}`}>{renderInline(item, `${key}-item-${itemIdx}`)}</li>
+              ))}
+            </ListTag>
+          );
+        }
+
+        if (block.type === 'quote') {
+          return (
+            <blockquote key={key} className="doc-quote">
+              {renderInline(block.text, `${key}-quote`)}
+            </blockquote>
+          );
+        }
+
+        if (block.type === 'code') {
+          return (
+            <pre key={key} className="doc-code">
+              <code>{block.code}</code>
+            </pre>
+          );
+        }
+
+        return <hr key={key} className="doc-divider" />;
+      })}
+
+      <style jsx>{`
+        .doc-content {
+          color: #1f2d3f;
+        }
+
+        .doc-heading {
+          margin: 18px 0 10px;
+          line-height: 1.3;
+          letter-spacing: -0.2px;
+        }
+
+        .doc-heading-l1 {
+          font-size: 30px;
+          font-weight: 800;
+        }
+
+        .doc-heading-l2 {
+          font-size: 25px;
+          font-weight: 700;
+        }
+
+        .doc-heading-l3 {
+          font-size: 20px;
+          font-weight: 700;
+        }
+
+        .doc-paragraph {
+          margin: 10px 0;
+          font-size: 18px;
+          line-height: 1.82;
+          color: #2a3a4f;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+
+        .doc-list {
+          margin: 10px 0 14px 22px;
+          color: #2a3a4f;
+        }
+
+        .doc-list li {
+          margin: 5px 0;
+          font-size: 18px;
+          line-height: 1.75;
+        }
+
+        .doc-quote {
+          margin: 12px 0;
+          padding: 10px 14px;
+          border-left: 4px solid rgba(0, 122, 255, 0.45);
+          background: rgba(0, 122, 255, 0.07);
+          border-radius: 8px;
+          color: #24446f;
+          line-height: 1.75;
+          white-space: pre-wrap;
+        }
+
+        .doc-code {
+          margin: 12px 0;
+          padding: 12px 14px;
+          border-radius: 12px;
+          background: #101317;
+          color: #f0f4ff;
+          font-size: 15px;
+          line-height: 1.65;
+          overflow-x: auto;
+        }
+
+        .doc-code code {
+          font-family: 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', monospace;
+        }
+
+        .doc-divider {
+          border: 0;
+          border-top: 1px solid rgba(20, 50, 90, 0.13);
+          margin: 14px 0;
+        }
+
+        :global(.doc-inline-link) {
+          color: #1062ca;
+          text-decoration: none;
+          border-bottom: 1px dashed rgba(16, 98, 202, 0.35);
+        }
+
+        :global(.doc-inline-link:hover) {
+          border-bottom-style: solid;
+        }
+
+        :global(.doc-inline-code) {
+          font-family: 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', monospace;
+          font-size: 0.92em;
+          background: rgba(16, 30, 56, 0.08);
+          border: 1px solid rgba(16, 30, 56, 0.12);
+          border-radius: 6px;
+          padding: 1px 6px;
+        }
+
+        @media (max-width: 680px) {
+          .doc-heading-l1 {
+            font-size: 24px;
+          }
+
+          .doc-heading-l2 {
+            font-size: 21px;
+          }
+
+          .doc-heading-l3 {
+            font-size: 18px;
+          }
+
+          .doc-paragraph,
+          .doc-list li {
+            font-size: 16px;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function parseDocBlocks(raw: string): DocBlock[] {
+  const text = raw.replace(/\r\n/g, '\n').trim();
+  if (!text) return [];
+
+  const lines = text.split('\n');
+  const blocks: DocBlock[] = [];
+  let index = 0;
+
+  function isStartOfBlock(line: string): boolean {
+    const trimmed = line.trim();
+    return (
+      /^#{1,3}\s+/.test(trimmed) ||
+      /^[-*]\s+/.test(trimmed) ||
+      /^\d+\.\s+/.test(trimmed) ||
+      /^>\s+/.test(trimmed) ||
+      /^```/.test(trimmed) ||
+      trimmed === '---' ||
+      trimmed === '***'
+    );
+  }
+
+  while (index < lines.length) {
+    const current = lines[index];
+    const trimmed = current.trim();
+
+    if (!trimmed) {
+      index += 1;
+      continue;
+    }
+
+    if (trimmed === '---' || trimmed === '***') {
+      blocks.push({ type: 'divider' });
+      index += 1;
+      continue;
+    }
+
+    if (/^```/.test(trimmed)) {
+      index += 1;
+      const codeLines: string[] = [];
+      while (index < lines.length && !/^```/.test(lines[index].trim())) {
+        codeLines.push(lines[index]);
+        index += 1;
+      }
+      if (index < lines.length) index += 1;
+      blocks.push({ type: 'code', code: codeLines.join('\n').trim() });
+      continue;
+    }
+
+    const headingMatch = trimmed.match(/^(#{1,3})\s+(.*)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length as 1 | 2 | 3;
+      blocks.push({ type: 'heading', level, text: headingMatch[2].trim() });
+      index += 1;
+      continue;
+    }
+
+    if (/^[-*]\s+/.test(trimmed)) {
+      const items: string[] = [];
+      while (index < lines.length) {
+        const row = lines[index].trim();
+        const match = row.match(/^[-*]\s+(.*)$/);
+        if (!match) break;
+        items.push(match[1].trim());
+        index += 1;
+      }
+      blocks.push({ type: 'list', ordered: false, items });
+      continue;
+    }
+
+    if (/^\d+\.\s+/.test(trimmed)) {
+      const items: string[] = [];
+      while (index < lines.length) {
+        const row = lines[index].trim();
+        const match = row.match(/^\d+\.\s+(.*)$/);
+        if (!match) break;
+        items.push(match[1].trim());
+        index += 1;
+      }
+      blocks.push({ type: 'list', ordered: true, items });
+      continue;
+    }
+
+    if (/^>\s+/.test(trimmed)) {
+      const quoteRows: string[] = [];
+      while (index < lines.length) {
+        const row = lines[index].trim();
+        const match = row.match(/^>\s+(.*)$/);
+        if (!match) break;
+        quoteRows.push(match[1].trim());
+        index += 1;
+      }
+      blocks.push({ type: 'quote', text: quoteRows.join('\n') });
+      continue;
+    }
+
+    const paragraphRows: string[] = [];
+    while (index < lines.length) {
+      const row = lines[index];
+      const rowTrimmed = row.trim();
+      if (!rowTrimmed) break;
+      if (isStartOfBlock(row)) break;
+      paragraphRows.push(rowTrimmed);
+      index += 1;
+    }
+
+    if (paragraphRows.length) {
+      blocks.push({ type: 'paragraph', text: paragraphRows.join('\n') });
+    } else {
+      index += 1;
+    }
+  }
+
+  return blocks;
+}
+
+function renderInline(text: string, keyPrefix: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const pattern = /`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+  let cursor = 0;
+  let match: RegExpExecArray | null = pattern.exec(text);
+  let index = 0;
+
+  while (match) {
+    if (match.index > cursor) {
+      nodes.push(text.slice(cursor, match.index));
+    }
+
+    if (match[1]) {
+      nodes.push(
+        <code className="doc-inline-code" key={`${keyPrefix}-inline-code-${index}`}>
+          {match[1]}
+        </code>
+      );
+    } else if (match[2] && match[3]) {
+      nodes.push(
+        <a
+          key={`${keyPrefix}-inline-link-${index}`}
+          href={match[3]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="doc-inline-link"
+        >
+          {match[2]}
+        </a>
+      );
+    }
+
+    cursor = match.index + match[0].length;
+    index += 1;
+    match = pattern.exec(text);
+  }
+
+  if (cursor < text.length) {
+    nodes.push(text.slice(cursor));
+  }
+
+  return nodes.length > 0 ? nodes : [text];
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function safeHost(value: string): string {
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return '';
+  }
+}
+
+function buildInstallCommand(sourceUrl: string, title: string): string {
+  if (!sourceUrl.includes('github.com')) {
+    return sourceUrl;
+  }
+
+  const repoUrl = sourceUrl.replace(/\/+$/, '');
+  const preferredSlugMatch = title.toLowerCase().match(/[a-z0-9]+(?:-[a-z0-9]+)+/);
+  const simpleSlug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const skillSlug = preferredSlugMatch?.[0] || simpleSlug || 'skill-name';
+  return `npx skills add ${repoUrl} --skill ${skillSlug}`;
 }
