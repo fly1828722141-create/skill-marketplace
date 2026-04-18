@@ -74,6 +74,38 @@ interface DashboardData {
   }>;
 }
 
+const EVENT_NAME_LABELS: Record<string, string> = {
+  page_view: '页面访问',
+  user_sign_in: '用户登录',
+  skill_detail_open: '打开技能详情',
+  skill_upload_success: '技能上传成功',
+  skill_download_click: '技能下载点击',
+  skill_search: '技能搜索',
+  category_click: '分类点击',
+  review_submit_success: '评价提交成功',
+  review_like_toggle: '评价点赞切换',
+};
+
+const MODULE_LABELS: Record<string, string> = {
+  navigation: '导航栏',
+  home: '首页',
+  upload: '上传页',
+  review: '评价区',
+  auth: '登录模块',
+  'skills-page': '技能列表页',
+  'skill-detail': '技能详情页',
+  dashboard: '数据看板',
+  unknown: '未知模块',
+};
+
+function toZhEventName(eventName: string) {
+  return EVENT_NAME_LABELS[eventName] || '其他事件';
+}
+
+function toZhModuleName(moduleName: string) {
+  return MODULE_LABELS[moduleName] || '其他模块';
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -197,37 +229,43 @@ export default function DashboardPage() {
             <StatCard title="独立访客" value={data.overview.uniqueVisitors} />
             <StatCard title="页面访问" value={data.overview.pageViews} />
             <StatCard title="登录次数" value={data.overview.logins} />
-            <StatCard title="Skill 上传" value={data.overview.uploads} />
+            <StatCard title="技能上传" value={data.overview.uploads} />
             <StatCard title="下载点击" value={data.overview.downloads} />
             <StatCard title="评价提交" value={data.overview.reviewSubmits} />
             <StatCard title="评价点赞" value={data.overview.reviewLikes} />
           </div>
 
           <div className="dashboard-grid">
-            <StatCard title="总 Skill 数" value={data.site.totalSkills} />
+            <StatCard title="总技能数" value={data.site.totalSkills} />
             <StatCard title="总用户数" value={data.site.totalUsers} />
             <StatCard title="累计下载" value={data.site.totalDownloads} />
             <StatCard title="累计浏览" value={data.site.totalViews} />
           </div>
 
           <section className="dashboard-card">
-            <h3>热门事件 Top 10</h3>
+            <h3>热门事件 前10</h3>
             <SimpleTable
               headers={['事件名', '次数']}
-              rows={data.topEvents.map((item) => [item.eventName, formatNumber(item.count)])}
+              rows={data.topEvents.map((item) => [
+                toZhEventName(item.eventName),
+                formatNumber(item.count),
+              ])}
             />
           </section>
 
           <section className="dashboard-card">
-            <h3>模块使用 Top 10</h3>
+            <h3>模块使用 前10</h3>
             <SimpleTable
               headers={['模块', '次数']}
-              rows={data.moduleUsage.map((item) => [item.module, formatNumber(item.count)])}
+              rows={data.moduleUsage.map((item) => [
+                toZhModuleName(item.module),
+                formatNumber(item.count),
+              ])}
             />
           </section>
 
           <section className="dashboard-card">
-            <h3>分类点击 Top 10</h3>
+            <h3>分类点击 前10</h3>
             <SimpleTable
               headers={['分类', '次数']}
               rows={data.topCategories.map((item) => [
@@ -238,7 +276,7 @@ export default function DashboardPage() {
           </section>
 
           <section className="dashboard-card">
-            <h3>活跃用户 Top 10</h3>
+            <h3>活跃用户 前10</h3>
             <SimpleTable
               headers={['用户', '部门', '事件次数']}
               rows={data.activeUsers.map((item) => [
@@ -250,7 +288,7 @@ export default function DashboardPage() {
           </section>
 
           <section className="dashboard-card">
-            <h3>分类趋势 Top 5</h3>
+            <h3>分类趋势 前5</h3>
             <SimpleTable
               headers={['分类', '窗口总点击', '近 7 天']}
               rows={data.categoryTrends.map((item) => {
@@ -268,9 +306,9 @@ export default function DashboardPage() {
           </section>
 
           <section className="dashboard-card">
-            <h3>下载榜单 Top 5</h3>
+            <h3>下载榜单 前5</h3>
             <SimpleTable
-              headers={['Skill', '分类', '下载', '浏览']}
+              headers={['技能名称', '分类', '下载', '浏览']}
               rows={data.topSkills.map((item) => [
                 item.title,
                 item.category?.name || '未分类',

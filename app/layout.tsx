@@ -6,6 +6,7 @@
 
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import Image from 'next/image';
 import { AntdRegistry } from '@ant-design/nextjs-registry';
 import Providers from '@/app/providers';
 import AuthActions from '@/components/auth-actions';
@@ -40,13 +41,14 @@ export default function RootLayout({
                 <div className="navbar-content">
                   <Link href="/" className="logo">
                     <div className="logo-icon" aria-hidden="true">
-                      <svg viewBox="0 0 40 40" className="logo-icon-svg">
-                        <path d="M9 30V10H17.5C22 10 25 12.4 25 16.4C25 19.7 22.8 22 18.5 22H13.5" />
-                        <path d="M13.5 18.4H24" />
-                        <path d="M24 12L31 16L24 20" />
-                        <path d="M24 22L31 26L24 30" />
-                        <path d="M29.5 9.5L31.8 7.2L33.7 9.1" />
-                      </svg>
+                      <Image
+                        src="/home-logo.png"
+                        alt="有求必应屋"
+                        width={56}
+                        height={56}
+                        className="logo-image"
+                        priority
+                      />
                     </div>
                     <span className="logo-text">有求必应屋</span>
                   </Link>
