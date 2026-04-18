@@ -1,18 +1,18 @@
 import type { CSSProperties } from 'react';
 
 const ICON_GRADIENTS: Array<[string, string]> = [
-  ['#186df7', '#63b6ff'],
-  ['#0a8f6a', '#45d6a8'],
-  ['#a85af7', '#d89cff'],
-  ['#d46a00', '#ffbb66'],
-  ['#0d6b9f', '#53b8ff'],
-  ['#b23a68', '#ff85b6'],
-  ['#5a4fd6', '#a9a1ff'],
-  ['#cf4b2a', '#ff9a6b'],
-  ['#0b7d8b', '#5ce0f3'],
-  ['#896100', '#f4c44d'],
-  ['#1e5e4a', '#67d1a8'],
-  ['#8a2c8f', '#df6ef1'],
+  ['#2c7cf7', '#67b7ff'],
+  ['#32b47e', '#67ddba'],
+  ['#7f67f8', '#b7abff'],
+  ['#ef7d3c', '#ffb36e'],
+  ['#34a1bf', '#70dbef'],
+  ['#f25f8f', '#ff94bd'],
+  ['#4f69f2', '#93a2ff'],
+  ['#3a9eea', '#7fceff'],
+  ['#00a2a8', '#5ed8d5'],
+  ['#9b7bf9', '#d3b9ff'],
+  ['#e97a55', '#ffc08e'],
+  ['#24a46f', '#6fd5a6'],
 ];
 
 function hashString(input: string): number {
@@ -43,21 +43,12 @@ function hexToRgba(hexColor: string, alpha: number): string {
 export function getSkillIconStyle(seed: string): CSSProperties {
   const hash = hashString(seed || 'skill');
   const [start, end] = ICON_GRADIENTS[hash % ICON_GRADIENTS.length];
-  const angle = 118 + (hash % 65);
-  const shadowColor = hexToRgba(start, 0.35);
+  const angle = 134 + (hash % 30);
+  const shadowColor = hexToRgba(start, 0.33);
+  const ambientColor = hexToRgba(end, 0.2);
 
   return {
     background: `linear-gradient(${angle}deg, ${start} 0%, ${end} 100%)`,
-    boxShadow: `0 10px 22px ${shadowColor}`,
+    boxShadow: `0 10px 20px ${shadowColor}, 0 3px 8px ${ambientColor}`,
   };
-}
-
-export function getSkillMonogram(title: string): string {
-  const clean = (title || '').trim();
-  if (!clean) return 'S';
-  const first = clean.charAt(0);
-  if (/[\u4e00-\u9fa5]/.test(first)) {
-    return first;
-  }
-  return first.toUpperCase();
 }

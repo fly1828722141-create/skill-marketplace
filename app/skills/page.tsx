@@ -8,7 +8,7 @@ import { useSession } from 'next-auth/react';
 import { Skill, SkillCategory } from '@/types';
 import { trackEvent } from '@/lib/analytics-client';
 import { getFallbackSkillCategories } from '@/lib/category-presets';
-import { getSkillIconStyle, getSkillMonogram } from '@/lib/skill-icon-style';
+import { getSkillIconStyle } from '@/lib/skill-icon-style';
 import { canManageSkill, isSuperAdminEmail } from '@/lib/dashboard-access';
 import { formatFileSize, formatNumber, formatTime } from '@/lib/utils';
 
@@ -394,7 +394,6 @@ function SkillsContent() {
                 <div className="skill-header">
                   <div className={`skill-icon skill-icon-unique ${color}`} style={iconStyle}>
                     <SkillGlyph kind={icon} />
-                    <span className="skill-icon-mono">{getSkillMonogram(skill.title)}</span>
                   </div>
                   <div className="skill-info">
                     <h3 className="skill-name">{skill.title}</h3>

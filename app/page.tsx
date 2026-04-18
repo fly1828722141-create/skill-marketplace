@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Skill, SkillCategory } from '@/types';
 import { trackEvent } from '@/lib/analytics-client';
 import { getFallbackSkillCategories } from '@/lib/category-presets';
-import { getSkillIconStyle, getSkillMonogram } from '@/lib/skill-icon-style';
+import { getSkillIconStyle } from '@/lib/skill-icon-style';
 import { formatNumber } from '@/lib/utils';
 
 const ALL_CATEGORY_ID = 'all';
@@ -412,7 +412,6 @@ export default function HomePage() {
                       style={{ ...iconStyle, width: 44, height: 44 }}
                     >
                       <SkillGlyph kind={icon} />
-                      <span className="skill-icon-mono">{getSkillMonogram(skill.title)}</span>
                     </div>
                     <div className="leaderboard-info">
                       <div className="leaderboard-name">{skill.title}</div>
@@ -504,7 +503,6 @@ function SkillGrid({
             <div className="skill-header">
               <div className={`skill-icon skill-icon-unique ${color}`} style={iconStyle}>
                 <SkillGlyph kind={icon} />
-                <span className="skill-icon-mono">{getSkillMonogram(skill.title)}</span>
               </div>
               <div className="skill-info">
                 <h3 className="skill-name">{skill.title}</h3>
@@ -576,7 +574,6 @@ function SkillModal({
           <div className="modal-skill-header">
             <div className={`modal-skill-icon skill-icon-unique ${color}`} style={iconStyle}>
               <SkillGlyph kind={icon} />
-              <span className="skill-icon-mono">{getSkillMonogram(skill.title)}</span>
             </div>
             <div className="modal-skill-info">
               <h2>{skill.title}</h2>
