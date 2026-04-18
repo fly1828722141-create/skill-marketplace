@@ -20,10 +20,11 @@ export async function POST(request: NextRequest) {
   try {
     // 解析请求体
     const body = await request.json();
-    const { skillId, anonymousId, sessionId } = body;
+    const { skillId, anonymousId, sessionId, mode } = body;
+    const actionMode = mode === 'copy' ? 'copy' : 'download';
     const currentUser = await getCurrentUser();
 
-    if (!currentUser) {
+    if (actionMode === 'download' && !currentUser) {
       return NextResponse.json(
         errorResponse('请先登录 Google 账号后下载 Skill', 'UNAUTHORIZED'),
         { status: 401 }
@@ -50,58 +51,76 @@ export async function POST(request: NextRequest) {
     }
 
     // 已登录用户每次点击都计一次下载
-    await prisma.skill.update({
+    const updatedSkill = await prisma.skill.update({
       where: { id: skillId },
       data: {
         downloadCount: {
           increment: 1,
         },
       },
-    });
-
-    const existingDownload = await prisma.download.findUnique({
-      where: {
-        userId_skillId: {
-          userId: currentUser.id,
-          skillId,
-        },
+      select: {
+        downloadCount: true,
       },
-      select: { id: true },
     });
 
-    const downloadedBefore = Boolean(existingDownload);
+    let downloadedBefore = false;
 
-    if (existingDownload) {
-      await prisma.download.update({
+    if (currentUser) {
+      const existingDownload = await prisma.download.findUnique({
         where: {
           userId_skillId: {
             userId: currentUser.id,
             skillId,
           },
         },
-        data: {
-          downloadedAt: new Date(),
-        },
+        select: { id: true },
       });
-    } else {
-      await prisma.download.create({
-        data: {
-          userId: currentUser.id,
-          skillId,
-        },
-      });
+
+      downloadedBefore = Boolean(existingDownload);
+
+      if (existingDownload) {
+        await prisma.download.update({
+          where: {
+            userId_skillId: {
+              userId: currentUser.id,
+              skillId,
+            },
+          },
+          data: {
+            downloadedAt: new Date(),
+          },
+        });
+      } else {
+        await prisma.download.create({
+          data: {
+            userId: currentUser.id,
+            skillId,
+          },
+        });
+      }
     }
 
     await recordEvent({
       eventName: 'skill_download_click',
       page: '/skills/[id]',
       module: 'skill-detail',
-      action: 'download',
-      userId: currentUser.id,
+      action: actionMode,
+      userId: currentUser?.id || null,
       skillId,
       anonymousId: typeof anonymousId === 'string' ? anonymousId : null,
       sessionId: typeof sessionId === 'string' ? sessionId : null,
     });
+
+    if (actionMode === 'copy') {
+      return NextResponse.json(
+        successResponse({
+          mode: actionMode,
+          downloadCountIncremented: true,
+          totalDownloads: updatedSkill.downloadCount,
+          downloadedBefore,
+        })
+      );
+    }
 
     let downloadUrl = '';
     const isExternalLinkSkill =
@@ -129,6 +148,7 @@ export async function POST(request: NextRequest) {
         sourceMode: isExternalLinkSkill ? 'link' : 'file',
         downloadedBefore,
         downloadCountIncremented: true,
+        totalDownloads: updatedSkill.downloadCount,
       })
     );
   } catch (error: any) {

@@ -1,70 +1,161 @@
-/**
- * 技能库列表页（修复 useSearchParams）
- */
-
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Skill, SkillCategory } from '@/types';
 import { trackEvent } from '@/lib/analytics-client';
 import { getFallbackSkillCategories } from '@/lib/category-presets';
-import { formatNumber, formatTime, formatFileSize } from '@/lib/utils';
+import { formatFileSize, formatNumber, formatTime } from '@/lib/utils';
+
+const ALL_CATEGORY_ID = 'all';
+
+type SortField = 'createdAt' | 'downloadCount' | 'viewCount';
+type SortOrder = 'asc' | 'desc';
+
+type IconKind = 'data' | 'content' | 'office' | 'dev' | 'image' | 'marketing' | 'generic';
+
+const CATEGORY_ICON: Record<string, { icon: IconKind; color: string }> = {
+  数据分析与研究: { icon: 'data', color: 'blue' },
+  '数据分析与 BI': { icon: 'data', color: 'blue' },
+  内容写作与营销: { icon: 'content', color: 'purple' },
+  内容写作与翻译: { icon: 'content', color: 'purple' },
+  办公效率与自动化: { icon: 'office', color: 'green' },
+  开发与编程: { icon: 'dev', color: 'orange' },
+  开发工具: { icon: 'dev', color: 'orange' },
+  开发工具与工程: { icon: 'dev', color: 'orange' },
+  设计与多媒体: { icon: 'image', color: 'pink' },
+  客服与销售运营: { icon: 'marketing', color: 'teal' },
+  营销与增长: { icon: 'marketing', color: 'teal' },
+  运营与客服: { icon: 'marketing', color: 'teal' },
+  '销售与 CRM': { icon: 'marketing', color: 'teal' },
+  'AI 模型与多模态': { icon: 'data', color: 'blue' },
+  教育与知识管理: { icon: 'content', color: 'green' },
+  行业场景解决方案: { icon: 'marketing', color: 'teal' },
+  工作流模板与编排: { icon: 'office', color: 'green' },
+  其他: { icon: 'generic', color: 'blue' },
+  默认: { icon: 'generic', color: 'blue' },
+};
+
+function normalizeSortBy(value: string | null): SortField {
+  if (value === 'downloadCount' || value === 'viewCount' || value === 'createdAt') {
+    return value;
+  }
+  return 'createdAt';
+}
+
+function normalizeSortOrder(value: string | null): SortOrder {
+  if (value === 'asc' || value === 'desc') {
+    return value;
+  }
+  return 'desc';
+}
+
+function formatRating(rating?: number | null) {
+  return typeof rating === 'number' ? rating.toFixed(1) : '暂无';
+}
+
+function pickCategory(skill: Skill): string {
+  if (skill.category?.name) {
+    return skill.category.name;
+  }
+  if (skill.tags?.length) {
+    return skill.tags[0];
+  }
+  return '其他';
+}
+
+function pickIconMeta(category: string) {
+  return CATEGORY_ICON[category] ?? CATEGORY_ICON.默认;
+}
 
 function SkillsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  
   const [skills, setSkills] = useState<Skill[]>([]);
   const [categories, setCategories] = useState<SkillCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
-  
+
   const [keyword, setKeyword] = useState(searchParams.get('keyword') || '');
-  const [categoryId, setCategoryId] = useState(searchParams.get('categoryId') || 'all');
-  const [sortBy, setSortBy] = useState(searchParams.get('sortBy') || 'createdAt');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(
-    (searchParams.get('sortOrder') as 'asc' | 'desc') || 'desc'
+  const [categoryId, setCategoryId] = useState(searchParams.get('categoryId') || ALL_CATEGORY_ID);
+  const [sortBy, setSortBy] = useState<SortField>(normalizeSortBy(searchParams.get('sortBy')));
+  const [sortOrder, setSortOrder] = useState<SortOrder>(
+    normalizeSortOrder(searchParams.get('sortOrder'))
   );
 
   useEffect(() => {
     setKeyword(searchParams.get('keyword') || '');
-    setCategoryId(searchParams.get('categoryId') || 'all');
-    setSortBy(searchParams.get('sortBy') || 'createdAt');
-    setSortOrder((searchParams.get('sortOrder') as 'asc' | 'desc') || 'desc');
+    setCategoryId(searchParams.get('categoryId') || ALL_CATEGORY_ID);
+    setSortBy(normalizeSortBy(searchParams.get('sortBy')));
+    setSortOrder(normalizeSortOrder(searchParams.get('sortOrder')));
   }, [searchParams]);
 
-  // 加载技能包列表
+  useEffect(() => {
+    let mounted = true;
+
+    async function fetchCategories() {
+      const fallbackCategories = getFallbackSkillCategories();
+      try {
+        const response = await fetch('/api/categories');
+        const result = await response.json();
+        if (!mounted) return;
+
+        const serverCategories =
+          result?.success && Array.isArray(result.data)
+            ? (result.data as SkillCategory[])
+            : [];
+        setCategories(serverCategories.length > 0 ? serverCategories : fallbackCategories);
+      } catch (error) {
+        console.error('分类加载失败:', error);
+        if (mounted) {
+          setCategories(fallbackCategories);
+        }
+      }
+    }
+
+    fetchCategories();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   useEffect(() => {
     let mounted = true;
 
     async function fetchSkills(silent: boolean) {
-      if (!silent) {
-        setLoading(true);
-      }
-
       try {
+        if (!silent) {
+          setLoading(true);
+        }
+
         const params = new URLSearchParams({
-          keyword: keyword,
           sortBy,
           sortOrder,
-          pageSize: '20',
+          pageSize: '24',
         });
 
-        if (categoryId !== 'all') {
+        if (keyword.trim()) {
+          params.set('keyword', keyword.trim());
+        }
+        if (categoryId !== ALL_CATEGORY_ID) {
           params.set('categoryId', categoryId);
         }
 
-        const response = await fetch(`/api/skills?${params}`);
+        const response = await fetch(`/api/skills?${params.toString()}`, {
+          cache: 'no-store',
+        });
         const result = await response.json();
 
-        if (mounted && result.success) {
-          setSkills(result.data.items);
-          setTotal(result.data.total);
+        if (!mounted || !result.success) {
+          return;
         }
+
+        setSkills(result.data.items || []);
+        setTotal(result.data.total || 0);
       } catch (error) {
-        console.error('加载失败:', error);
+        console.error('加载 Skill 列表失败:', error);
       } finally {
         if (mounted && !silent) {
           setLoading(false);
@@ -81,172 +172,215 @@ function SkillsContent() {
     };
   }, [categoryId, keyword, sortBy, sortOrder]);
 
-  useEffect(() => {
-    let mounted = true;
+  const sortLabel = useMemo(() => {
+    if (sortBy === 'viewCount') return '浏览量';
+    if (sortBy === 'downloadCount') return '下载量';
+    return '上传时间';
+  }, [sortBy]);
 
-    async function fetchCategories() {
-      const fallbackCategories = getFallbackSkillCategories();
-
-      try {
-        const response = await fetch('/api/categories');
-        const result = await response.json();
-        if (mounted) {
-          const serverCategories =
-            result?.success && Array.isArray(result.data)
-              ? (result.data as SkillCategory[])
-              : [];
-          setCategories(
-            serverCategories.length > 0 ? serverCategories : fallbackCategories
-          );
-        }
-      } catch (error) {
-        console.error('分类加载失败:', error);
-        if (mounted) {
-          setCategories(fallbackCategories);
-        }
-      }
-    }
-
-    fetchCategories();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  // 搜索处理
-  function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
+  function handleApplyFilters(event: React.FormEvent) {
+    event.preventDefault();
     trackEvent({
       eventName: 'skill_search',
       module: 'skills-page',
       action: 'submit',
+      categoryId: categoryId === ALL_CATEGORY_ID ? undefined : categoryId,
       metadata: {
         keyword,
-        categoryId,
+        sortBy,
+        sortOrder,
       },
     });
-    router.push(
-      `/skills?keyword=${keyword}&categoryId=${categoryId}&sortBy=${sortBy}&sortOrder=${sortOrder}`
-    );
+
+    const params = new URLSearchParams();
+    if (keyword.trim()) params.set('keyword', keyword.trim());
+    if (categoryId !== ALL_CATEGORY_ID) params.set('categoryId', categoryId);
+    params.set('sortBy', sortBy);
+    params.set('sortOrder', sortOrder);
+    router.push(`/skills?${params.toString()}`);
   }
 
   return (
-    <div className="skills-page">
-      <h1>📚 技能库</h1>
-      <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
-        实时数据：共 {formatNumber(total)} 个 Skill
-      </p>
-      
-      {/* 搜索栏 */}
-      <form onSubmit={handleSearch} className="search-form">
+    <div className="skills-page-shell">
+      <section className="skills-page-hero">
+        <h1>📚 技能库</h1>
+        <p>
+          实时收录 {formatNumber(total)} 个 Skill，当前按 {sortLabel}
+          {sortOrder === 'desc' ? '降序' : '升序'} 展示
+        </p>
+      </section>
+
+      <form className="skills-toolbar" onSubmit={handleApplyFilters}>
         <input
           type="text"
-          placeholder="搜索技能包..."
+          className="input skills-toolbar-input"
+          placeholder="搜索 Skill 名称、简介或标签..."
           value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          className="search-input"
+          onChange={(event) => setKeyword(event.target.value)}
         />
         <select
+          className="input skills-toolbar-select"
           value={categoryId}
-          onChange={(e) => {
-            const nextCategoryId = e.target.value;
-            setCategoryId(nextCategoryId);
-            trackEvent({
-              eventName: 'category_click',
-              module: 'skills-page',
-              action: 'change',
-              categoryId: nextCategoryId === 'all' ? undefined : nextCategoryId,
-            });
-          }}
-          className="search-input"
-          style={{ maxWidth: 220 }}
+          onChange={(event) => setCategoryId(event.target.value)}
         >
-          <option value="all">全部分类</option>
+          <option value={ALL_CATEGORY_ID}>全部分类</option>
           {categories.map((category) => (
             <option key={category.id} value={category.id}>
               {category.name}
             </option>
           ))}
         </select>
-        <button type="submit" className="search-button">搜索</button>
+        <select
+          className="input skills-toolbar-select"
+          value={sortBy}
+          onChange={(event) => setSortBy(normalizeSortBy(event.target.value))}
+        >
+          <option value="createdAt">上传时间</option>
+          <option value="viewCount">浏览量</option>
+          <option value="downloadCount">下载量</option>
+        </select>
+        <select
+          className="input skills-toolbar-select"
+          value={sortOrder}
+          onChange={(event) => setSortOrder(normalizeSortOrder(event.target.value))}
+        >
+          <option value="desc">降序</option>
+          <option value="asc">升序</option>
+        </select>
+        <button type="submit" className="download-btn skills-toolbar-submit">
+          应用筛选
+        </button>
       </form>
 
-      {/* 技能列表 */}
       {loading ? (
-        <div className="loading">加载中...</div>
-      ) : skills.length === 0 ? (
-        <div className="empty-state">暂无技能包</div>
-      ) : (
         <div className="skills-grid">
-          {skills.map((skill) => (
-            <Link
-              key={skill.id}
-              href={`/skills/${skill.id}`}
-              className="skill-card"
-              onClick={() =>
-                trackEvent({
-                  eventName: 'skill_detail_open',
-                  module: 'skills-page',
-                  action: 'click',
-                  skillId: skill.id,
-                })
-              }
-            >
-              <h3>{skill.title}</h3>
-              <p>{skill.summary || skill.description}</p>
-              {(() => {
-                const isExternalLinkSkill =
-                  skill.fileType?.toLowerCase() === 'link' || /^https?:\/\//i.test(skill.fileName);
-                return (
-                  <div className="skill-meta">
-                    <span>📥 {formatNumber(skill.downloadCount)}</span>
-                    <span>👁 {formatNumber(skill.viewCount)}</span>
-                    <span>
-                      ⭐{' '}
-                      {typeof skill.ratingAvg === 'number'
-                        ? skill.ratingAvg.toFixed(1)
-                        : '暂无评分'}
-                    </span>
-                    <span>📝 {formatNumber(skill.ratingCount ?? skill._count?.comments ?? 0)} 评价</span>
-                    <span>
-                      {isExternalLinkSkill ? '🔗 外链' : `💾 ${formatFileSize(skill.fileSize)}`}
-                    </span>
-                  </div>
-                );
-              })()}
-              <div className="skill-footer">
-                <span className="author">{skill.author?.name || '未知作者'}</span>
-                <span className="time">{formatTime(skill.createdAt)}</span>
-              </div>
-            </Link>
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={index} className="skill-card skeleton-card">
+              <div className="skeleton" style={{ width: 64, height: 64, borderRadius: 12 }} />
+              <div className="skeleton" style={{ width: '60%', height: 20, marginTop: 12 }} />
+              <div className="skeleton" style={{ width: '100%', height: 56, marginTop: 12 }} />
+            </div>
           ))}
         </div>
-      )}
+      ) : skills.length === 0 ? (
+        <div className="empty-block">当前筛选条件下暂无 Skill，换个关键词试试</div>
+      ) : (
+        <div className="skills-grid">
+          {skills.map((skill) => {
+            const category = pickCategory(skill);
+            const { icon, color } = pickIconMeta(category);
+            const isExternalLinkSkill =
+              skill.fileType?.toLowerCase() === 'link' || /^https?:\/\//i.test(skill.fileName);
 
-      <style jsx>{`
-        .skills-page { max-width: 1200px; margin: 0 auto; padding: 24px; }
-        h1 { font-size: 28px; margin-bottom: 24px; }
-        .search-form { display: flex; gap: 12px; margin-bottom: 32px; }
-        .search-input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
-        .search-button { padding: 12px 24px; background: #FF6A00; color: white; border: none; border-radius: 8px; cursor: pointer; }
-        .skills-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; }
-        .skill-card { padding: 20px; border: 1px solid #eee; border-radius: 12px; transition: all 0.3s; text-decoration: none; color: inherit; }
-        .skill-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: translateY(-2px); }
-        .skill-card h3 { font-size: 18px; margin-bottom: 8px; color: #1890ff; }
-        .skill-card p { font-size: 14px; color: #666; margin-bottom: 16px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-        .skill-meta { display: flex; gap: 10px 14px; flex-wrap: wrap; font-size: 13px; color: #999; margin-bottom: 12px; }
-        .skill-footer { display: flex; justify-content: space-between; font-size: 12px; color: #999; }
-        .loading, .empty-state { text-align: center; padding: 60px; color: #999; }
-      `}</style>
+            return (
+              <Link
+                key={skill.id}
+                href={`/skills/${skill.id}`}
+                className="skill-card skill-card-link"
+                onClick={() =>
+                  trackEvent({
+                    eventName: 'skill_detail_open',
+                    module: 'skills-page',
+                    action: 'click',
+                    skillId: skill.id,
+                  })
+                }
+              >
+                <div className="skill-header">
+                  <div className={`skill-icon ${color}`}>
+                    <SkillGlyph kind={icon} />
+                  </div>
+                  <div className="skill-info">
+                    <h3 className="skill-name">{skill.title}</h3>
+                    <p className="skill-author">{skill.author?.name || '匿名作者'}</p>
+                    <span className="skill-category">{category}</span>
+                  </div>
+                </div>
+                <p className="skill-desc">{skill.summary || skill.description}</p>
+
+                <div className="skill-list-meta">
+                  <span>📥 {formatNumber(skill.downloadCount)}</span>
+                  <span>👁 {formatNumber(skill.viewCount)}</span>
+                  <span>⭐ {formatRating(skill.ratingAvg)}</span>
+                  <span>📝 {formatNumber(skill.ratingCount ?? skill._count?.comments ?? 0)}</span>
+                  <span>{isExternalLinkSkill ? '🔗 外链' : `💾 ${formatFileSize(skill.fileSize)}`}</span>
+                  <span>{formatTime(skill.createdAt)}</span>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
 export default function SkillsPage() {
   return (
-    <Suspense fallback={<div className="loading">加载中...</div>}>
+    <Suspense fallback={<div className="loading-page">加载中...</div>}>
       <SkillsContent />
     </Suspense>
   );
+}
+
+function SkillGlyph({ kind }: { kind: IconKind }) {
+  switch (kind) {
+    case 'data':
+      return (
+        <svg viewBox="0 0 24 24" className="skill-icon-glyph">
+          <path d="M4 20V10" />
+          <path d="M10 20V6" />
+          <path d="M16 20V13" />
+          <path d="M22 20V3" />
+        </svg>
+      );
+    case 'content':
+      return (
+        <svg viewBox="0 0 24 24" className="skill-icon-glyph">
+          <path d="M4 20L9 19L19 9L15 5L5 15L4 20Z" />
+          <path d="M14 6L18 10" />
+        </svg>
+      );
+    case 'office':
+      return (
+        <svg viewBox="0 0 24 24" className="skill-icon-glyph">
+          <rect x="5" y="3" width="14" height="18" rx="2" />
+          <path d="M8 8H16" />
+          <path d="M8 12H16" />
+          <path d="M8 16H13" />
+        </svg>
+      );
+    case 'dev':
+      return (
+        <svg viewBox="0 0 24 24" className="skill-icon-glyph">
+          <path d="M8 8L4 12L8 16" />
+          <path d="M16 8L20 12L16 16" />
+          <path d="M13.5 5L10.5 19" />
+        </svg>
+      );
+    case 'image':
+      return (
+        <svg viewBox="0 0 24 24" className="skill-icon-glyph">
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="M3 15L8 10L12 14L15 11L21 17" />
+          <circle cx="16.5" cy="8" r="1.5" />
+        </svg>
+      );
+    case 'marketing':
+      return (
+        <svg viewBox="0 0 24 24" className="skill-icon-glyph">
+          <path d="M4 13V11L14 6V18L4 13Z" />
+          <path d="M14 9C16.5 9 18.5 11 18.5 13C18.5 15 16.5 17 14 17" />
+          <path d="M6.5 13V18H9.5V14.5" />
+        </svg>
+      );
+    default:
+      return (
+        <svg viewBox="0 0 24 24" className="skill-icon-glyph">
+          <path d="M12 3L20 7.5V16.5L12 21L4 16.5V7.5L12 3Z" />
+          <path d="M12 3V12L20 7.5" />
+          <path d="M12 12L4 7.5" />
+        </svg>
+      );
+  }
 }

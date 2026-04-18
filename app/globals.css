@@ -155,13 +155,30 @@ button {
 .logo-icon {
   width: 40px;
   height: 40px;
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  background: linear-gradient(145deg, #0a84ff 0%, #59c6ff 100%);
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+  box-shadow: 0 8px 18px rgba(0, 122, 255, 0.28);
   overflow: hidden;
+  position: relative;
+}
+
+.logo-icon::after {
+  content: 'fly';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  border-radius: 8px;
+  padding: 1px 4px;
+  font-size: 8px;
+  line-height: 1.2;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(9, 37, 77, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.34);
 }
 
 .logo-icon-svg {
@@ -746,6 +763,67 @@ button {
   color: var(--text-secondary);
   text-align: center;
   padding: 30px 20px;
+}
+
+/* 技能库页面 */
+.skills-page-shell {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 10px 40px 60px;
+}
+
+.skills-page-hero {
+  margin-bottom: 18px;
+}
+
+.skills-page-hero h1 {
+  font-size: 44px;
+  line-height: 1.1;
+  letter-spacing: -0.9px;
+  margin-bottom: 10px;
+}
+
+.skills-page-hero p {
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+
+.skills-toolbar {
+  border-radius: 20px;
+  border: 1px solid rgba(0, 122, 255, 0.14);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: var(--shadow-sm);
+  padding: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) repeat(3, minmax(140px, 0.5fr)) auto;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.skills-toolbar-input,
+.skills-toolbar-select {
+  height: 44px;
+}
+
+.skills-toolbar-submit {
+  min-width: 108px;
+  height: 44px;
+}
+
+.skill-card-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+
+.skill-list-meta {
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  padding: 12px 24px 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
 }
 
 /* 页脚 */
@@ -1649,6 +1727,28 @@ button {
   .content-section {
     padding-left: 20px;
     padding-right: 20px;
+  }
+
+  .skills-page-shell {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .skills-page-hero h1 {
+    font-size: 34px;
+  }
+
+  .skills-page-hero p {
+    font-size: 14px;
+  }
+
+  .skills-toolbar {
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+
+  .skills-toolbar-submit {
+    width: 100%;
   }
 
   .skills-grid {

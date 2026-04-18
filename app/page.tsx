@@ -176,7 +176,7 @@ export default function HomePage() {
   }, [skills, activeCategoryId, keyword]);
 
   const hotSkills = useMemo(
-    () => [...filteredSkills].sort((a, b) => b.downloadCount - a.downloadCount).slice(0, 4),
+    () => [...filteredSkills].sort((a, b) => b.viewCount - a.viewCount).slice(0, 4),
     [filteredSkills]
   );
 
@@ -190,9 +190,9 @@ export default function HomePage() {
     [filteredSkills]
   );
 
-  const totalHotDownloads = useMemo(
-    () => hotSkills.reduce((sum, skill) => sum + skill.downloadCount, 0),
-    [hotSkills]
+  const totalLeaderboardDownloads = useMemo(
+    () => leaderboard.reduce((sum, skill) => sum + skill.downloadCount, 0),
+    [leaderboard]
   );
 
   const rankedLabel = formatNumber(overview.totalSkills || filteredSkills.length || 0);
@@ -304,7 +304,7 @@ export default function HomePage() {
           <h2 className="section-title">热门推荐</h2>
           <button
             className="view-all"
-            onClick={() => router.push('/skills?sortBy=downloadCount')}
+            onClick={() => router.push('/skills?sortBy=viewCount')}
           >
             查看全部 →
           </button>
@@ -336,7 +336,7 @@ export default function HomePage() {
         <div className="leaderboard-section">
           <div className="section-header">
             <h2 className="section-title">下载排行榜</h2>
-            <div className="leaderboard-summary">累计热度 {formatNumber(totalHotDownloads)}</div>
+            <div className="leaderboard-summary">累计下载 {formatNumber(totalLeaderboardDownloads)}</div>
           </div>
           <div className="leaderboard-grid">
             {loading ? (

@@ -10,6 +10,7 @@ import { AntdRegistry } from '@ant-design/nextjs-registry';
 import Providers from '@/app/providers';
 import AuthActions from '@/components/auth-actions';
 import AnalyticsTracker from '@/components/analytics-tracker';
+import NavLinks from '@/components/nav-links';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -40,30 +41,16 @@ export default function RootLayout({
                   <Link href="/" className="logo">
                     <div className="logo-icon" aria-hidden="true">
                       <svg viewBox="0 0 40 40" className="logo-icon-svg">
-                        <rect x="8" y="8" width="24" height="24" rx="8" />
-                        <path d="M13 21L19 15L27 23" />
-                        <path d="M22 23H27V18" />
+                        <path d="M9 30V10H17.5C22 10 25 12.4 25 16.4C25 19.7 22.8 22 18.5 22H13.5" />
+                        <path d="M13.5 18.4H24" />
+                        <path d="M24 12L31 16L24 20" />
+                        <path d="M24 22L31 26L24 30" />
+                        <path d="M29.5 9.5L31.8 7.2L33.7 9.1" />
                       </svg>
                     </div>
                     <span className="logo-text">有求必应屋</span>
                   </Link>
-                  <nav className="nav-links">
-                    <Link href="/" className="nav-link active">
-                      首页
-                    </Link>
-                    <Link href="/skills" className="nav-link">
-                      分类
-                    </Link>
-                    <Link href="/#leaderboard" className="nav-link">
-                      排行榜
-                    </Link>
-                    <Link href="/skills" className="nav-link">
-                      我的
-                    </Link>
-                    <Link href="/dashboard" className="nav-link">
-                      数据看板
-                    </Link>
-                  </nav>
+                  <NavLinks />
                   <AuthActions />
                 </div>
               </header>

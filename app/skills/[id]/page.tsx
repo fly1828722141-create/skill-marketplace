@@ -4,7 +4,7 @@
 
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { message } from 'antd';
@@ -29,6 +29,7 @@ export default function SkillDetailPage() {
   const [skill, setSkill] = useState<Skill | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const lastCopyTrackAtRef = useRef(0);
 
   const skillId = params.id as string;
 
@@ -65,6 +66,62 @@ export default function SkillDetailPage() {
     () => parseDocBlocks(skill?.description || ''),
     [skill?.description]
   );
+
+  const trackCopyDownload = useCallback(
+    async (source: 'copy-button' | 'manual-selection') => {
+      const now = Date.now();
+      // 避免一次复制动作触发重复计数（按钮复制可能连带触发 copy 事件）
+      if (now - lastCopyTrackAtRef.current < 800) {
+        return;
+      }
+      lastCopyTrackAtRef.current = now;
+
+      try {
+        const identity = getTrackingIdentity();
+        const response = await fetch('/api/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            skillId,
+            anonymousId: identity.anonymousId,
+            sessionId: identity.sessionId,
+            mode: 'copy',
+            source,
+          }),
+        });
+        const result = await response.json();
+        if (!result.success) return;
+
+        setSkill((prev) => {
+          if (!prev) return prev;
+          const totalDownloads = Number(result.data?.totalDownloads);
+          return {
+            ...prev,
+            downloadCount:
+              Number.isFinite(totalDownloads) && totalDownloads >= 0
+                ? totalDownloads
+                : prev.downloadCount + 1,
+          };
+        });
+      } catch (error) {
+        console.error('复制下载计数失败:', error);
+      }
+    },
+    [skillId]
+  );
+
+  useEffect(() => {
+    function handleCopy() {
+      const selected = window.getSelection()?.toString().trim() || '';
+      if (!selected) return;
+      void trackCopyDownload('manual-selection');
+    }
+
+    document.addEventListener('copy', handleCopy);
+    return () => {
+      document.removeEventListener('copy', handleCopy);
+    };
+  }, [trackCopyDownload]);
 
   async function handleDownload() {
     if (status === 'loading') {
@@ -106,7 +163,14 @@ export default function SkillDetailPage() {
         }
 
         if (result.data.downloadCountIncremented && skill) {
-          setSkill({ ...skill, downloadCount: skill.downloadCount + 1 });
+          const totalDownloads = Number(result.data?.totalDownloads);
+          setSkill({
+            ...skill,
+            downloadCount:
+              Number.isFinite(totalDownloads) && totalDownloads >= 0
+                ? totalDownloads
+                : skill.downloadCount + 1,
+          });
         }
       } else {
         message.error(result.error || '下载失败');
@@ -140,6 +204,7 @@ export default function SkillDetailPage() {
       }
 
       message.success(successMessage);
+      await trackCopyDownload('copy-button');
     } catch (error) {
       console.error('复制失败:', error);
       message.error('复制失败，请手动复制');

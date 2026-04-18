@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { message } from 'antd';
+import { isDashboardOwnerEmail } from '@/lib/dashboard-access';
 import { formatNumber } from '@/lib/utils';
 
 interface DashboardData {
@@ -76,6 +77,7 @@ interface DashboardData {
 export default function DashboardPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
+  const isDashboardOwner = isDashboardOwnerEmail(session?.user?.email);
   const [days, setDays] = useState(7);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
@@ -108,12 +110,12 @@ export default function DashboardPage() {
       }
     }
 
-    if (session?.user) {
+    if (isDashboardOwner) {
       fetchDashboard();
     }
 
     const timer = setInterval(() => {
-      if (session?.user) {
+      if (isDashboardOwner) {
         fetchDashboard();
       }
     }, 30000);
@@ -122,7 +124,7 @@ export default function DashboardPage() {
       mounted = false;
       clearInterval(timer);
     };
-  }, [days, session?.user]);
+  }, [days, isDashboardOwner]);
 
   if (status === 'loading') {
     return <div className="loading-page">加载中...</div>;
@@ -139,6 +141,26 @@ export default function DashboardPage() {
             onClick={() => router.push('/login')}
           >
             使用 Google 登录
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isDashboardOwner) {
+    return (
+      <div className="dashboard-page">
+        <div className="dashboard-card" style={{ textAlign: 'center' }}>
+          <h2>仅 fly 管理员账号可查看数据看板</h2>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
+            当前登录账号无权限访问该页面
+          </p>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => router.push('/')}
+          >
+            返回首页
           </button>
         </div>
       </div>

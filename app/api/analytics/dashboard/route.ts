@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import { isDashboardOwnerEmail } from '@/lib/dashboard-access';
 import { errorResponse, successResponse } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -33,6 +34,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         errorResponse('请先登录后查看看板', 'UNAUTHORIZED'),
         { status: 401 }
+      );
+    }
+
+    if (!isDashboardOwnerEmail(currentUser.email)) {
+      return NextResponse.json(
+        errorResponse('仅 fly 管理员账号可查看数据看板', 'FORBIDDEN'),
+        { status: 403 }
       );
     }
 
