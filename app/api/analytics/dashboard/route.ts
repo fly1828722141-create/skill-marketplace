@@ -52,123 +52,7 @@ export async function GET(request: NextRequest) {
     const startAt = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     const endAt = new Date();
 
-    const [
-      totalEvents,
-      pageViews,
-      loginEvents,
-      downloadClicks,
-      uploadEvents,
-      reviewSubmitEvents,
-      reviewLikeEvents,
-      visitorsRaw,
-      eventTopRaw,
-      moduleTopRaw,
-      categoryTopRaw,
-      trendRaw,
-      categoryTrendRaw,
-      activeUsersRaw,
-      totalSkills,
-      totalUsers,
-      skillStats,
-      topSkills,
-    ] = await Promise.all([
-      prisma.eventLog.count({
-        where: { createdAt: { gte: startAt } },
-      }),
-      prisma.eventLog.count({
-        where: {
-          createdAt: { gte: startAt },
-          eventName: 'page_view',
-        },
-      }),
-      prisma.eventLog.count({
-        where: {
-          createdAt: { gte: startAt },
-          eventName: 'user_sign_in',
-        },
-      }),
-      prisma.eventLog.count({
-        where: {
-          createdAt: { gte: startAt },
-          eventName: 'skill_download_click',
-        },
-      }),
-      prisma.eventLog.count({
-        where: {
-          createdAt: { gte: startAt },
-          eventName: 'skill_upload_success',
-        },
-      }),
-      prisma.eventLog.count({
-        where: {
-          createdAt: { gte: startAt },
-          eventName: 'review_submit_success',
-        },
-      }),
-      prisma.eventLog.count({
-        where: {
-          createdAt: { gte: startAt },
-          eventName: 'review_like_toggle',
-        },
-      }),
-      prisma.eventLog.findMany({
-        where: { createdAt: { gte: startAt } },
-        select: {
-          userId: true,
-          anonymousId: true,
-          sessionId: true,
-        },
-      }),
-      prisma.eventLog.groupBy({
-        by: ['eventName'],
-        where: { createdAt: { gte: startAt } },
-        _count: { _all: true },
-      }),
-      prisma.eventLog.groupBy({
-        by: ['module'],
-        where: {
-          createdAt: { gte: startAt },
-          module: { not: null },
-        },
-        _count: { _all: true },
-      }),
-      prisma.eventLog.groupBy({
-        by: ['categoryId'],
-        where: {
-          createdAt: { gte: startAt },
-          eventName: 'category_click',
-          categoryId: { not: null },
-        },
-        _count: { _all: true },
-      }),
-      prisma.eventLog.findMany({
-        where: { createdAt: { gte: startAt } },
-        select: {
-          createdAt: true,
-          eventName: true,
-        },
-      }),
-      prisma.eventLog.findMany({
-        where: {
-          createdAt: { gte: startAt },
-          eventName: 'category_click',
-          categoryId: { not: null },
-        },
-        select: {
-          createdAt: true,
-          categoryId: true,
-        },
-      }),
-      prisma.eventLog.groupBy({
-        by: ['userId'],
-        where: {
-          createdAt: { gte: startAt },
-          userId: { not: null },
-        },
-        _count: {
-          _all: true,
-        },
-      }),
+    const [totalSkills, totalUsers, skillStats, topSkills] = await Promise.all([
       prisma.skill.count({ where: { status: 'active' } }),
       prisma.user.count(),
       prisma.skill.aggregate({
@@ -195,6 +79,144 @@ export async function GET(request: NextRequest) {
         },
       }),
     ]);
+
+    let totalEvents = 0;
+    let pageViews = 0;
+    let loginEvents = 0;
+    let downloadClicks = 0;
+    let uploadEvents = 0;
+    let reviewSubmitEvents = 0;
+    let reviewLikeEvents = 0;
+    let visitorsRaw: Array<{
+      userId: string | null;
+      anonymousId: string | null;
+      sessionId: string | null;
+    }> = [];
+    let eventTopRaw: Array<{ eventName: string; _count: { _all: number } }> = [];
+    let moduleTopRaw: Array<{ module: string | null; _count: { _all: number } }> = [];
+    let categoryTopRaw: Array<{ categoryId: string | null; _count: { _all: number } }> = [];
+    let trendRaw: Array<{ createdAt: Date; eventName: string }> = [];
+    let categoryTrendRaw: Array<{ createdAt: Date; categoryId: string | null }> = [];
+    let activeUsersRaw: Array<{ userId: string | null; _count: { _all: number } }> = [];
+
+    try {
+      [
+        totalEvents,
+        pageViews,
+        loginEvents,
+        downloadClicks,
+        uploadEvents,
+        reviewSubmitEvents,
+        reviewLikeEvents,
+        visitorsRaw,
+        eventTopRaw,
+        moduleTopRaw,
+        categoryTopRaw,
+        trendRaw,
+        categoryTrendRaw,
+        activeUsersRaw,
+      ] = await Promise.all([
+        prisma.eventLog.count({
+          where: { createdAt: { gte: startAt } },
+        }),
+        prisma.eventLog.count({
+          where: {
+            createdAt: { gte: startAt },
+            eventName: 'page_view',
+          },
+        }),
+        prisma.eventLog.count({
+          where: {
+            createdAt: { gte: startAt },
+            eventName: 'user_sign_in',
+          },
+        }),
+        prisma.eventLog.count({
+          where: {
+            createdAt: { gte: startAt },
+            eventName: 'skill_download_click',
+          },
+        }),
+        prisma.eventLog.count({
+          where: {
+            createdAt: { gte: startAt },
+            eventName: 'skill_upload_success',
+          },
+        }),
+        prisma.eventLog.count({
+          where: {
+            createdAt: { gte: startAt },
+            eventName: 'review_submit_success',
+          },
+        }),
+        prisma.eventLog.count({
+          where: {
+            createdAt: { gte: startAt },
+            eventName: 'review_like_toggle',
+          },
+        }),
+        prisma.eventLog.findMany({
+          where: { createdAt: { gte: startAt } },
+          select: {
+            userId: true,
+            anonymousId: true,
+            sessionId: true,
+          },
+        }),
+        prisma.eventLog.groupBy({
+          by: ['eventName'],
+          where: { createdAt: { gte: startAt } },
+          _count: { _all: true },
+        }),
+        prisma.eventLog.groupBy({
+          by: ['module'],
+          where: {
+            createdAt: { gte: startAt },
+            module: { not: null },
+          },
+          _count: { _all: true },
+        }),
+        prisma.eventLog.groupBy({
+          by: ['categoryId'],
+          where: {
+            createdAt: { gte: startAt },
+            eventName: 'category_click',
+            categoryId: { not: null },
+          },
+          _count: { _all: true },
+        }),
+        prisma.eventLog.findMany({
+          where: { createdAt: { gte: startAt } },
+          select: {
+            createdAt: true,
+            eventName: true,
+          },
+        }),
+        prisma.eventLog.findMany({
+          where: {
+            createdAt: { gte: startAt },
+            eventName: 'category_click',
+            categoryId: { not: null },
+          },
+          select: {
+            createdAt: true,
+            categoryId: true,
+          },
+        }),
+        prisma.eventLog.groupBy({
+          by: ['userId'],
+          where: {
+            createdAt: { gte: startAt },
+            userId: { not: null },
+          },
+          _count: {
+            _all: true,
+          },
+        }),
+      ]);
+    } catch (eventQueryError) {
+      console.error('看板事件数据查询失败，已降级为基础统计:', eventQueryError);
+    }
 
     const visitorSet = new Set<string>();
     visitorsRaw.forEach((row) => {

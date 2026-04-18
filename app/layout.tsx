@@ -14,9 +14,9 @@ import NavLinks from '@/components/nav-links';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Skill Marketplace - 技能分享平台',
-  description: '阿里巴巴内部技能分享平台，支持上传和下载技能包',
-  keywords: ['技能分享', 'Next.js', 'TypeScript', '阿里巴巴'],
+  title: '有求必应屋 - Skill 分享平台',
+  description: '支持上传、分享与下载 Skill 的社区平台',
+  keywords: ['Skill', '技能分享', 'Next.js', 'TypeScript'],
 };
 
 export default function RootLayout({

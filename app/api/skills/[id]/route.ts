@@ -4,6 +4,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { getCurrentUser } from '@/lib/auth';
+import { canManageSkill } from '@/lib/dashboard-access';
 import { successResponse, errorResponse } from '@/lib/utils';
 import { normalizeTagsFromDb, parseTagsInput, toPrismaTagsValue } from '@/lib/tags';
 import { ensureDefaultCategories } from '@/lib/skill-categories';
@@ -17,17 +19,11 @@ export async function GET(
 ) {
   try {
     const skillId = params.id;
+    const shouldTrackView = request.nextUrl.searchParams.get('track') !== '0';
 
     let skill: any = null;
     try {
-      // 原子递增浏览量，返回最新详情
-      skill = await prisma.skill.update({
-        where: { id: skillId },
-        data: {
-          viewCount: {
-            increment: 1,
-          },
-        },
+      const includeConfig = {
         include: {
           author: {
             select: {
@@ -65,7 +61,25 @@ export async function GET(
             },
           },
         },
-      });
+      } as const;
+
+      if (shouldTrackView) {
+        // 原子递增浏览量，返回最新详情
+        skill = await prisma.skill.update({
+          where: { id: skillId },
+          data: {
+            viewCount: {
+              increment: 1,
+            },
+          },
+          ...includeConfig,
+        });
+      } else {
+        skill = await prisma.skill.findUnique({
+          where: { id: skillId },
+          ...includeConfig,
+        });
+      }
     } catch (error: any) {
       if (error?.code === 'P2025') {
         return NextResponse.json(
@@ -74,6 +88,13 @@ export async function GET(
         );
       }
       throw error;
+    }
+
+    if (!skill) {
+      return NextResponse.json(
+        errorResponse('技能包不存在', 'SKILL_NOT_FOUND'),
+        { status: 404 }
+      );
     }
 
     const ratingAggregate = await prisma.comment.aggregate({
@@ -113,6 +134,14 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json(
+        errorResponse('请先登录后再修改 Skill', 'UNAUTHORIZED'),
+        { status: 401 }
+      );
+    }
+
     const skillId = params.id;
     const body = await request.json();
     const { title, summary, description, categoryId, tags } = body;
@@ -126,6 +155,13 @@ export async function PUT(
       return NextResponse.json(
         errorResponse('技能包不存在', 'SKILL_NOT_FOUND'),
         { status: 404 }
+      );
+    }
+
+    if (!canManageSkill(currentUser.email, currentUser.id, existingSkill.authorId)) {
+      return NextResponse.json(
+        errorResponse('仅作者或管理员可修改该 Skill', 'FORBIDDEN'),
+        { status: 403 }
       );
     }
 
@@ -222,6 +258,14 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json(
+        errorResponse('请先登录后再删除 Skill', 'UNAUTHORIZED'),
+        { status: 401 }
+      );
+    }
+
     const skillId = params.id;
 
     // 检查技能包是否存在
@@ -233,6 +277,13 @@ export async function DELETE(
       return NextResponse.json(
         errorResponse('技能包不存在', 'SKILL_NOT_FOUND'),
         { status: 404 }
+      );
+    }
+
+    if (!canManageSkill(currentUser.email, currentUser.id, existingSkill.authorId)) {
+      return NextResponse.json(
+        errorResponse('仅作者或管理员可删除该 Skill', 'FORBIDDEN'),
+        { status: 403 }
       );
     }
 

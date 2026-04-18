@@ -3,12 +3,16 @@
 import Link from 'next/link';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { message } from 'antd';
+import { useSession } from 'next-auth/react';
 import { Skill, SkillCategory } from '@/types';
 import { trackEvent } from '@/lib/analytics-client';
 import { getFallbackSkillCategories } from '@/lib/category-presets';
+import { canManageSkill, isSuperAdminEmail } from '@/lib/dashboard-access';
 import { formatFileSize, formatNumber, formatTime } from '@/lib/utils';
 
 const ALL_CATEGORY_ID = 'all';
+const SKILLS_PAGE_CACHE_KEY = 'skill_marketplace_skills_page_cache_v1';
 
 type SortField = 'createdAt' | 'downloadCount' | 'viewCount';
 type SortOrder = 'asc' | 'desc';
@@ -72,13 +76,16 @@ function pickIconMeta(category: string) {
 function SkillsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { data: session, status } = useSession();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [categories, setCategories] = useState<SkillCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
+  const [deletingSkillId, setDeletingSkillId] = useState<string | null>(null);
 
   const [keyword, setKeyword] = useState(searchParams.get('keyword') || '');
   const [categoryId, setCategoryId] = useState(searchParams.get('categoryId') || ALL_CATEGORY_ID);
+  const [mineOnly, setMineOnly] = useState(searchParams.get('mine') === '1');
   const [sortBy, setSortBy] = useState<SortField>(normalizeSortBy(searchParams.get('sortBy')));
   const [sortOrder, setSortOrder] = useState<SortOrder>(
     normalizeSortOrder(searchParams.get('sortOrder'))
@@ -87,6 +94,7 @@ function SkillsContent() {
   useEffect(() => {
     setKeyword(searchParams.get('keyword') || '');
     setCategoryId(searchParams.get('categoryId') || ALL_CATEGORY_ID);
+    setMineOnly(searchParams.get('mine') === '1');
     setSortBy(normalizeSortBy(searchParams.get('sortBy')));
     setSortOrder(normalizeSortOrder(searchParams.get('sortOrder')));
   }, [searchParams]);
@@ -126,8 +134,34 @@ function SkillsContent() {
 
     async function fetchSkills(silent: boolean) {
       try {
+        const cacheKey = `${SKILLS_PAGE_CACHE_KEY}:${mineOnly ? 'mine' : 'all'}:${categoryId}:${sortBy}:${sortOrder}:${keyword
+          .trim()
+          .toLowerCase()}`;
+
         if (!silent) {
+          if (typeof window !== 'undefined') {
+            const cachedSkillsRaw = window.localStorage.getItem(cacheKey);
+            if (cachedSkillsRaw) {
+              try {
+                const cachedSkills = JSON.parse(cachedSkillsRaw);
+                if (Array.isArray(cachedSkills) && cachedSkills.length > 0 && mounted) {
+                  setSkills(cachedSkills as Skill[]);
+                  setTotal(cachedSkills.length);
+                }
+              } catch (error) {
+                console.error('读取技能库缓存失败:', error);
+              }
+            }
+          }
           setLoading(true);
+        }
+
+        if (mineOnly && status !== 'loading' && !session?.user?.id) {
+          if (mounted) {
+            setSkills([]);
+            setTotal(0);
+          }
+          return;
         }
 
         const params = new URLSearchParams({
@@ -142,6 +176,9 @@ function SkillsContent() {
         if (categoryId !== ALL_CATEGORY_ID) {
           params.set('categoryId', categoryId);
         }
+        if (mineOnly && session?.user?.id) {
+          params.set('authorId', session.user.id);
+        }
 
         const response = await fetch(`/api/skills?${params.toString()}`, {
           cache: 'no-store',
@@ -154,6 +191,9 @@ function SkillsContent() {
 
         setSkills(result.data.items || []);
         setTotal(result.data.total || 0);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(cacheKey, JSON.stringify(result.data.items || []));
+        }
       } catch (error) {
         console.error('加载 Skill 列表失败:', error);
       } finally {
@@ -170,7 +210,7 @@ function SkillsContent() {
       mounted = false;
       clearInterval(timer);
     };
-  }, [categoryId, keyword, sortBy, sortOrder]);
+  }, [categoryId, keyword, mineOnly, session?.user?.id, sortBy, sortOrder, status]);
 
   const sortLabel = useMemo(() => {
     if (sortBy === 'viewCount') return '浏览量';
@@ -187,6 +227,7 @@ function SkillsContent() {
       categoryId: categoryId === ALL_CATEGORY_ID ? undefined : categoryId,
       metadata: {
         keyword,
+        mineOnly,
         sortBy,
         sortOrder,
       },
@@ -195,9 +236,37 @@ function SkillsContent() {
     const params = new URLSearchParams();
     if (keyword.trim()) params.set('keyword', keyword.trim());
     if (categoryId !== ALL_CATEGORY_ID) params.set('categoryId', categoryId);
+    if (mineOnly) params.set('mine', '1');
     params.set('sortBy', sortBy);
     params.set('sortOrder', sortOrder);
     router.push(`/skills?${params.toString()}`);
+  }
+
+  async function handleDeleteSkill(skill: Skill) {
+    if (!window.confirm(`确认删除「${skill.title}」吗？删除后将不在列表中展示。`)) {
+      return;
+    }
+
+    try {
+      setDeletingSkillId(skill.id);
+      const response = await fetch(`/api/skills/${skill.id}`, {
+        method: 'DELETE',
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '删除失败');
+      }
+
+      setSkills((prev) => prev.filter((item) => item.id !== skill.id));
+      setTotal((prev) => Math.max(0, prev - 1));
+      message.success('Skill 已删除');
+    } catch (error: any) {
+      console.error('删除 Skill 失败:', error);
+      message.error(error.message || '删除失败');
+    } finally {
+      setDeletingSkillId(null);
+    }
   }
 
   return (
@@ -205,10 +274,25 @@ function SkillsContent() {
       <section className="skills-page-hero">
         <h1>📚 技能库</h1>
         <p>
-          实时收录 {formatNumber(total)} 个 Skill，当前按 {sortLabel}
+          {mineOnly ? '我的上传' : '实时收录'} {formatNumber(total)} 个 Skill，当前按 {sortLabel}
           {sortOrder === 'desc' ? '降序' : '升序'} 展示
         </p>
       </section>
+
+      {mineOnly && status !== 'loading' && !session?.user ? (
+        <div className="empty-block" style={{ marginBottom: 16 }}>
+          请先登录后查看你上传的 Skill
+          <div style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              className="download-btn"
+              onClick={() => router.push('/login')}
+            >
+              去登录
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <form className="skills-toolbar" onSubmit={handleApplyFilters}>
         <input
@@ -250,6 +334,13 @@ function SkillsContent() {
         <button type="submit" className="download-btn skills-toolbar-submit">
           应用筛选
         </button>
+        <button
+          type="button"
+          className={`skills-mine-toggle ${mineOnly ? 'active' : ''}`}
+          onClick={() => setMineOnly((prev) => !prev)}
+        >
+          {mineOnly ? '查看全部' : '仅看我上传'}
+        </button>
       </form>
 
       {loading ? (
@@ -272,20 +363,26 @@ function SkillsContent() {
             const isExternalLinkSkill =
               skill.fileType?.toLowerCase() === 'link' || /^https?:\/\//i.test(skill.fileName);
 
+            const canManage = canManageSkill(
+              session?.user?.email || null,
+              session?.user?.id || null,
+              skill.authorId
+            );
+
             return (
-              <Link
-                key={skill.id}
-                href={`/skills/${skill.id}`}
-                className="skill-card skill-card-link"
-                onClick={() =>
-                  trackEvent({
-                    eventName: 'skill_detail_open',
-                    module: 'skills-page',
-                    action: 'click',
-                    skillId: skill.id,
-                  })
-                }
-              >
+              <article key={skill.id} className="skill-card skill-card-article">
+                <Link
+                  href={`/skills/${skill.id}`}
+                  className="skill-card-link-body"
+                  onClick={() =>
+                    trackEvent({
+                      eventName: 'skill_detail_open',
+                      module: 'skills-page',
+                      action: 'click',
+                      skillId: skill.id,
+                    })
+                  }
+                >
                 <div className="skill-header">
                   <div className={`skill-icon ${color}`}>
                     <SkillGlyph kind={icon} />
@@ -306,7 +403,27 @@ function SkillsContent() {
                   <span>{isExternalLinkSkill ? '🔗 外链' : `💾 ${formatFileSize(skill.fileSize)}`}</span>
                   <span>{formatTime(skill.createdAt)}</span>
                 </div>
-              </Link>
+                </Link>
+
+                {canManage ? (
+                  <div className="skill-manage-row">
+                    <Link href={`/skills/${skill.id}/edit`} className="skill-manage-btn">
+                      修改
+                    </Link>
+                    <button
+                      type="button"
+                      className="skill-manage-btn danger"
+                      disabled={deletingSkillId === skill.id}
+                      onClick={() => void handleDeleteSkill(skill)}
+                    >
+                      {deletingSkillId === skill.id ? '删除中...' : '删除'}
+                    </button>
+                    {isSuperAdminEmail(session?.user?.email) ? (
+                      <span className="skill-manage-tip">管理员权限</span>
+                    ) : null}
+                  </div>
+                ) : null}
+              </article>
             );
           })}
         </div>

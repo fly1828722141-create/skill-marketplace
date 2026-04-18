@@ -11,6 +11,7 @@ import { message } from 'antd';
 import { useSession } from 'next-auth/react';
 import { Skill } from '@/types';
 import SkillReviews from '@/components/skill-reviews';
+import { canManageSkill, isSuperAdminEmail } from '@/lib/dashboard-access';
 import { getTrackingIdentity } from '@/lib/analytics-client';
 import { formatDateTime, formatFileSize, formatNumber } from '@/lib/utils';
 
@@ -29,6 +30,7 @@ export default function SkillDetailPage() {
   const [skill, setSkill] = useState<Skill | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const lastCopyTrackAtRef = useRef(0);
 
   const skillId = params.id as string;
@@ -66,6 +68,10 @@ export default function SkillDetailPage() {
     () => parseDocBlocks(skill?.description || ''),
     [skill?.description]
   );
+  const canManageCurrentSkill = useMemo(() => {
+    if (!skill) return false;
+    return canManageSkill(session?.user?.email || null, session?.user?.id || null, skill.authorId);
+  }, [session?.user?.email, session?.user?.id, skill]);
 
   const trackCopyDownload = useCallback(
     async (source: 'copy-button' | 'manual-selection') => {
@@ -211,6 +217,39 @@ export default function SkillDetailPage() {
     }
   }
 
+  async function handleDeleteSkill() {
+    if (!skill) return;
+
+    if (!canManageCurrentSkill) {
+      message.error('你没有权限删除该 Skill');
+      return;
+    }
+
+    if (!window.confirm(`确认删除「${skill.title}」吗？删除后将不在列表中展示。`)) {
+      return;
+    }
+
+    try {
+      setDeleting(true);
+      const response = await fetch(`/api/skills/${skill.id}`, {
+        method: 'DELETE',
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '删除失败');
+      }
+
+      message.success('Skill 已删除');
+      router.push('/skills');
+    } catch (error: any) {
+      console.error('删除 Skill 失败:', error);
+      message.error(error.message || '删除失败');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   if (loading) {
     return <div className="loading-page">加载中...</div>;
   }
@@ -348,6 +387,25 @@ export default function SkillDetailPage() {
                 <div className="stat-label">评价人数</div>
               </div>
             </div>
+
+            {canManageCurrentSkill ? (
+              <div className="manage-skill-actions">
+                <Link href={`/skills/${skill.id}/edit`} className="skill-manage-btn">
+                  修改 Skill
+                </Link>
+                <button
+                  type="button"
+                  className="skill-manage-btn danger"
+                  disabled={deleting}
+                  onClick={() => void handleDeleteSkill()}
+                >
+                  {deleting ? '删除中...' : '删除 Skill'}
+                </button>
+                {isSuperAdminEmail(session?.user?.email) ? (
+                  <div className="skill-manage-tip">管理员权限：可管理所有 Skill</div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <div className="author-card">
@@ -639,6 +697,16 @@ export default function SkillDetailPage() {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 10px;
+        }
+
+        .manage-skill-actions {
+          margin-top: 12px;
+          padding-top: 12px;
+          border-top: 1px dashed rgba(0, 0, 0, 0.1);
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          align-items: center;
         }
 
         .stat-item {

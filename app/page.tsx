@@ -8,6 +8,8 @@ import { getFallbackSkillCategories } from '@/lib/category-presets';
 import { formatNumber } from '@/lib/utils';
 
 const ALL_CATEGORY_ID = 'all';
+const HOME_SKILLS_CACHE_KEY = 'skill_marketplace_home_skills_v1';
+const HOME_OVERVIEW_CACHE_KEY = 'skill_marketplace_home_overview_v1';
 
 type IconKind = 'data' | 'content' | 'office' | 'dev' | 'image' | 'marketing' | 'generic';
 
@@ -79,39 +81,88 @@ export default function HomePage() {
 
   useEffect(() => {
     let mounted = true;
+    const fallbackCategories = getFallbackSkillCategories();
 
-    async function fetchInitialData() {
-      const fallbackCategories = getFallbackSkillCategories();
+    function readCachedState() {
+      if (typeof window === 'undefined') {
+        return false;
+      }
+
+      let hasCache = false;
 
       try {
-        setLoading(true);
-        const [skillsResponse, categoriesResponse, overviewResponse] = await Promise.all([
-          fetch('/api/skills?pageSize=50&sortBy=createdAt&sortOrder=desc'),
-          fetch('/api/categories'),
-          fetch('/api/stats/overview', { cache: 'no-store' }),
-        ]);
-        const [skillsResult, categoriesResult, overviewResult] = await Promise.all([
-          skillsResponse.json(),
-          categoriesResponse.json(),
-          overviewResponse.json(),
+        const cachedSkillsRaw = window.localStorage.getItem(HOME_SKILLS_CACHE_KEY);
+        if (cachedSkillsRaw) {
+          const cachedSkills = JSON.parse(cachedSkillsRaw);
+          if (Array.isArray(cachedSkills) && cachedSkills.length > 0 && mounted) {
+            setSkills(cachedSkills as Skill[]);
+            hasCache = true;
+          }
+        }
+      } catch (error) {
+        console.error('读取首页缓存技能失败:', error);
+      }
+
+      try {
+        const cachedOverviewRaw = window.localStorage.getItem(HOME_OVERVIEW_CACHE_KEY);
+        if (cachedOverviewRaw && mounted) {
+          const cachedOverview = JSON.parse(cachedOverviewRaw);
+          if (cachedOverview && typeof cachedOverview === 'object') {
+            setOverview((prev) => ({ ...prev, ...cachedOverview }));
+            hasCache = true;
+          }
+        }
+      } catch (error) {
+        console.error('读取首页缓存统计失败:', error);
+      }
+
+      if (mounted) {
+        setCategories((prev) => (prev.length > 0 ? prev : fallbackCategories));
+      }
+
+      return hasCache;
+    }
+
+    async function fetchInitialData() {
+      const hasCache = readCachedState();
+
+      try {
+        if (!hasCache) {
+          setLoading(true);
+        }
+
+        const [skillsResult, categoriesResult, overviewResult] = await Promise.allSettled([
+          fetch('/api/skills?pageSize=50&sortBy=createdAt&sortOrder=desc', {
+            cache: 'no-store',
+          }).then((response) => response.json()),
+          fetch('/api/categories', { cache: 'no-store' }).then((response) => response.json()),
+          fetch('/api/stats/overview', { cache: 'no-store' }).then((response) => response.json()),
         ]);
 
-        if (mounted && skillsResult.success) {
-          setSkills(skillsResult.data.items || []);
+        if (mounted && skillsResult.status === 'fulfilled' && skillsResult.value?.success) {
+          const nextSkills = skillsResult.value.data?.items || [];
+          setSkills(nextSkills);
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem(HOME_SKILLS_CACHE_KEY, JSON.stringify(nextSkills));
+          }
         }
 
         if (mounted) {
           const serverCategories =
-            categoriesResult?.success && Array.isArray(categoriesResult.data)
-              ? (categoriesResult.data as SkillCategory[])
+            categoriesResult.status === 'fulfilled' &&
+            categoriesResult.value?.success &&
+            Array.isArray(categoriesResult.value.data)
+              ? (categoriesResult.value.data as SkillCategory[])
               : [];
-          setCategories(
-            serverCategories.length > 0 ? serverCategories : fallbackCategories
-          );
+          setCategories(serverCategories.length > 0 ? serverCategories : fallbackCategories);
         }
 
-        if (mounted && overviewResult.success) {
-          setOverview(overviewResult.data);
+        if (mounted && overviewResult.status === 'fulfilled' && overviewResult.value?.success) {
+          const nextOverview = overviewResult.value.data;
+          setOverview(nextOverview);
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem(HOME_OVERVIEW_CACHE_KEY, JSON.stringify(nextOverview));
+          }
         }
       } catch (error) {
         console.error('加载技能列表失败:', error);
@@ -124,23 +175,27 @@ export default function HomePage() {
 
     async function refreshData() {
       try {
-        const [skillsResponse, overviewResponse] = await Promise.all([
+        const [skillsResult, overviewResult] = await Promise.allSettled([
           fetch('/api/skills?pageSize=50&sortBy=createdAt&sortOrder=desc', {
             cache: 'no-store',
-          }),
-          fetch('/api/stats/overview', { cache: 'no-store' }),
-        ]);
-        const [skillsResult, overviewResult] = await Promise.all([
-          skillsResponse.json(),
-          overviewResponse.json(),
+          }).then((response) => response.json()),
+          fetch('/api/stats/overview', { cache: 'no-store' }).then((response) => response.json()),
         ]);
 
-        if (mounted && skillsResult.success) {
-          setSkills(skillsResult.data.items || []);
+        if (mounted && skillsResult.status === 'fulfilled' && skillsResult.value?.success) {
+          const nextSkills = skillsResult.value.data?.items || [];
+          setSkills(nextSkills);
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem(HOME_SKILLS_CACHE_KEY, JSON.stringify(nextSkills));
+          }
         }
 
-        if (mounted && overviewResult.success) {
-          setOverview(overviewResult.data);
+        if (mounted && overviewResult.status === 'fulfilled' && overviewResult.value?.success) {
+          const nextOverview = overviewResult.value.data;
+          setOverview(nextOverview);
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem(HOME_OVERVIEW_CACHE_KEY, JSON.stringify(nextOverview));
+          }
         }
       } catch (error) {
         console.error('刷新首页数据失败:', error);
@@ -317,21 +372,6 @@ export default function HomePage() {
         />
       </section>
 
-      <section className="content-section">
-        <div className="section-header">
-          <h2 className="section-title">最新上传</h2>
-          <button className="view-all" onClick={() => router.push('/skills?sortBy=createdAt')}>
-            查看全部 →
-          </button>
-        </div>
-        <SkillGrid
-          loading={loading}
-          skills={newSkills}
-          source="new"
-          onOpen={openSkillModal}
-        />
-      </section>
-
       <section className="content-section" id="leaderboard">
         <div className="leaderboard-section">
           <div className="section-header">
@@ -372,6 +412,21 @@ export default function HomePage() {
             )}
           </div>
         </div>
+      </section>
+
+      <section className="content-section">
+        <div className="section-header">
+          <h2 className="section-title">最新上传</h2>
+          <button className="view-all" onClick={() => router.push('/skills?sortBy=createdAt')}>
+            查看全部 →
+          </button>
+        </div>
+        <SkillGrid
+          loading={loading}
+          skills={newSkills}
+          source="new"
+          onOpen={openSkillModal}
+        />
       </section>
 
       <SkillModal

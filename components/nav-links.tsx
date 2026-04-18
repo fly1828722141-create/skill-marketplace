@@ -28,7 +28,7 @@ export default function NavLinks() {
       <Link href="/#leaderboard" className="nav-link">
         排行榜
       </Link>
-      <Link href="/skills" className="nav-link">
+      <Link href="/skills?mine=1" className="nav-link">
         我的
       </Link>
       {isDashboardOwner ? (

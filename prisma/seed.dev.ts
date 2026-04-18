@@ -19,38 +19,38 @@ async function main() {
   console.log('👤 创建测试用户...');
 
   const user1 = await prisma.user.upsert({
-    where: { email: 'gongyan.gy@alibaba-inc.com' },
+    where: { email: 'fly1828722141@gmail.com' },
     update: {},
     create: {
-      name: '龚艳 (尚凡)',
-      email: 'gongyan.gy@alibaba-inc.com',
-      department: '飞猪 - 大住宿 - 经营效能部',
-      employeeId: '390599',
-      avatar: 'https://gw.alicdn.com/tfs/TB1.3.XSpXXXXXXXVXXXXXXXXXX-192-192.png',
+      name: 'Fly',
+      email: 'fly1828722141@gmail.com',
+      department: 'Creator',
+      employeeId: '000001',
+      avatar: 'https://avatars.githubusercontent.com/u/9919?s=200&v=4',
     },
   });
 
   const user2 = await prisma.user.upsert({
-    where: { email: 'zhaohonggang.zhg@alibaba-inc.com' },
+    where: { email: 'maker@example.com' },
     update: {},
     create: {
-      name: '赵鸿刚 (之奥)',
-      email: 'zhaohonggang.zhg@alibaba-inc.com',
-      department: '飞猪 - 大住宿 - 经营效能部',
-      employeeId: '123456',
-      avatar: 'https://gw.alicdn.com/tfs/TB1.3.XSpXXXXXXXVXXXXXXXXXX-192-192.png',
+      name: 'Maker',
+      email: 'maker@example.com',
+      department: 'Community',
+      employeeId: '000002',
+      avatar: 'https://avatars.githubusercontent.com/u/810438?s=200&v=4',
     },
   });
 
   const user3 = await prisma.user.upsert({
-    where: { email: 'lulu.ll@alibaba-inc.com' },
+    where: { email: 'studio@example.com' },
     update: {},
     create: {
-      name: '鹿陆',
-      email: 'lulu.ll@alibaba-inc.com',
-      department: '飞猪 - 大住宿 - 经营效能部',
-      employeeId: '654321',
-      avatar: 'https://gw.alicdn.com/tfs/TB1.3.XSpXXXXXXXVXXXXXXXXXX-192-192.png',
+      name: 'Studio',
+      email: 'studio@example.com',
+      department: 'Design',
+      employeeId: '000003',
+      avatar: 'https://avatars.githubusercontent.com/u/583231?s=200&v=4',
     },
   });
 
@@ -118,7 +118,7 @@ async function main() {
     {
       title: 'Prisma ORM 最佳实践',
       summary: '整理了 Prisma 在真实业务中的建模、迁移、索引和性能优化经验。',
-      description: 'Prisma 在阿里巴巴内部项目的实战经验总结，包含数据库设计、性能优化、迁移策略等内容。',
+      description: 'Prisma 在真实项目中的实战经验总结，包含数据库设计、性能优化、迁移策略等内容。',
       categoryId: categoryMap['data-analytics'],
       tags: 'Prisma,Database,ORM,PostgreSQL',
       fileName: 'prisma-best-practices.zip',
@@ -138,11 +138,11 @@ async function main() {
       authorId: user2.id,
     },
     {
-      title: '阿里云 FaaS 部署指南',
-      summary: '从环境配置到发布上线，完整覆盖 FaaS 场景下的部署流程与坑位。',
-      description: '从零开始在阿里云 FaaS 平台部署 Node.js 应用的完整流程，包含环境配置、CI/CD、监控告警等。',
+      title: '云函数部署指南',
+      summary: '从环境配置到发布上线，完整覆盖 Serverless 场景下的部署流程与坑位。',
+      description: '从零开始在云函数平台部署 Node.js 应用的完整流程，包含环境配置、CI/CD、监控告警等。',
       categoryId: categoryMap['operations-support'],
-      tags: 'FaaS，云计算，DevOps，阿里云',
+      tags: 'Serverless，云计算，DevOps',
       fileName: 'faas-deployment-guide.zip',
       fileSize: 4096000, // 4MB
       fileType: 'zip',
