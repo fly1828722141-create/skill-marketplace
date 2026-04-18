@@ -350,7 +350,6 @@ export default function SkillDetailPage() {
             <DocRenderer blocks={docBlocks} />
           </div>
 
-          <SkillReviews skillId={skillId} />
         </div>
 
         <aside className="skill-sidebar">
@@ -426,6 +425,8 @@ export default function SkillDetailPage() {
               </div>
             ) : null}
           </div>
+
+          <SkillReviews skillId={skillId} className="skill-sidebar-reviews" />
         </aside>
       </div>
 

@@ -62,16 +62,16 @@ export default function RootLayout({
 
               <footer className="footer">
                 <div className="footer-links">
-                  <Link href="/skills" className="footer-link">
+                  <Link href="/about" className="footer-link">
                     关于我们
                   </Link>
-                  <Link href="/skills" className="footer-link">
+                  <Link href="/guide" className="footer-link">
                     使用指南
                   </Link>
-                  <Link href="/skills" className="footer-link">
+                  <Link href="/docs" className="footer-link">
                     开发者文档
                   </Link>
-                  <Link href="/upload" className="footer-link">
+                  <Link href="/feedback" className="footer-link">
                     意见反馈
                   </Link>
                 </div>

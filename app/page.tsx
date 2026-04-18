@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Skill, SkillCategory } from '@/types';
 import { trackEvent } from '@/lib/analytics-client';
 import { getFallbackSkillCategories } from '@/lib/category-presets';
+import { getSkillIconStyle, getSkillMonogram } from '@/lib/skill-icon-style';
 import { formatNumber } from '@/lib/utils';
 
 const ALL_CATEGORY_ID = 'all';
@@ -57,6 +58,10 @@ function pickCategory(skill: Skill): string {
 
 function pickIconMeta(category: string) {
   return CATEGORY_ICON[category] ?? CATEGORY_ICON.默认;
+}
+
+function buildSkillIconSeed(skill: Skill): string {
+  return `${skill.id}:${skill.title}:${skill.categoryId || 'none'}`;
 }
 
 function formatRating(rating?: number | null) {
@@ -392,6 +397,7 @@ export default function HomePage() {
               leaderboard.map((skill, index) => {
                 const category = pickCategory(skill);
                 const { icon, color } = pickIconMeta(category);
+                const iconStyle = getSkillIconStyle(buildSkillIconSeed(skill));
                 const rankClass = index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : 'normal';
 
                 return (
@@ -401,8 +407,12 @@ export default function HomePage() {
                     onClick={() => openSkillModal(skill, 'leaderboard')}
                   >
                     <div className={`rank ${rankClass}`}>{index + 1}</div>
-                    <div className={`skill-icon skill-icon-compact ${color}`} style={{ width: 44, height: 44 }}>
+                    <div
+                      className={`skill-icon skill-icon-compact skill-icon-unique ${color}`}
+                      style={{ ...iconStyle, width: 44, height: 44 }}
+                    >
                       <SkillGlyph kind={icon} />
+                      <span className="skill-icon-mono">{getSkillMonogram(skill.title)}</span>
                     </div>
                     <div className="leaderboard-info">
                       <div className="leaderboard-name">{skill.title}</div>
@@ -483,6 +493,7 @@ function SkillGrid({
       {skills.map((skill) => {
         const category = pickCategory(skill);
         const { icon, color } = pickIconMeta(category);
+        const iconStyle = getSkillIconStyle(buildSkillIconSeed(skill));
 
         return (
           <article
@@ -491,8 +502,9 @@ function SkillGrid({
             onClick={() => onOpen(skill, source)}
           >
             <div className="skill-header">
-              <div className={`skill-icon ${color}`}>
+              <div className={`skill-icon skill-icon-unique ${color}`} style={iconStyle}>
                 <SkillGlyph kind={icon} />
+                <span className="skill-icon-mono">{getSkillMonogram(skill.title)}</span>
               </div>
               <div className="skill-info">
                 <h3 className="skill-name">{skill.title}</h3>
@@ -550,6 +562,7 @@ function SkillModal({
 
   const category = pickCategory(skill);
   const { icon, color } = pickIconMeta(category);
+  const iconStyle = getSkillIconStyle(buildSkillIconSeed(skill));
 
   return (
     <div className="modal-overlay active" onClick={onClose}>
@@ -561,8 +574,9 @@ function SkillModal({
         </div>
         <div className="modal-content">
           <div className="modal-skill-header">
-            <div className={`modal-skill-icon ${color}`}>
+            <div className={`modal-skill-icon skill-icon-unique ${color}`} style={iconStyle}>
               <SkillGlyph kind={icon} />
+              <span className="skill-icon-mono">{getSkillMonogram(skill.title)}</span>
             </div>
             <div className="modal-skill-info">
               <h2>{skill.title}</h2>

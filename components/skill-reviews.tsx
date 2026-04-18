@@ -39,7 +39,13 @@ interface ReviewListResponse {
 
 const MAX_REVIEW_IMAGES = 4;
 
-export default function SkillReviews({ skillId }: { skillId: string }) {
+export default function SkillReviews({
+  skillId,
+  className,
+}: {
+  skillId: string;
+  className?: string;
+}) {
   const router = useRouter();
   const { data: session } = useSession();
   const [loading, setLoading] = useState(true);
@@ -190,7 +196,7 @@ export default function SkillReviews({ skillId }: { skillId: string }) {
   }
 
   return (
-    <section className="skill-description-card">
+    <section className={`skill-description-card ${className || ''}`.trim()}>
       <div className="review-header">
         <h3>📝 评价 ({formatNumber(total)})</h3>
         <div className="review-tip">点赞数高的评价会自动置顶</div>

@@ -8,6 +8,7 @@ import { useSession } from 'next-auth/react';
 import { Skill, SkillCategory } from '@/types';
 import { trackEvent } from '@/lib/analytics-client';
 import { getFallbackSkillCategories } from '@/lib/category-presets';
+import { getSkillIconStyle, getSkillMonogram } from '@/lib/skill-icon-style';
 import { canManageSkill, isSuperAdminEmail } from '@/lib/dashboard-access';
 import { formatFileSize, formatNumber, formatTime } from '@/lib/utils';
 
@@ -71,6 +72,10 @@ function pickCategory(skill: Skill): string {
 
 function pickIconMeta(category: string) {
   return CATEGORY_ICON[category] ?? CATEGORY_ICON.默认;
+}
+
+function buildSkillIconSeed(skill: Skill): string {
+  return `${skill.id}:${skill.title}:${skill.categoryId || 'none'}`;
 }
 
 function SkillsContent() {
@@ -362,6 +367,7 @@ function SkillsContent() {
           {skills.map((skill) => {
             const category = pickCategory(skill);
             const { icon, color } = pickIconMeta(category);
+            const iconStyle = getSkillIconStyle(buildSkillIconSeed(skill));
             const isExternalLinkSkill =
               skill.fileType?.toLowerCase() === 'link' || /^https?:\/\//i.test(skill.fileName);
 
@@ -386,8 +392,9 @@ function SkillsContent() {
                   }
                 >
                 <div className="skill-header">
-                  <div className={`skill-icon ${color}`}>
+                  <div className={`skill-icon skill-icon-unique ${color}`} style={iconStyle}>
                     <SkillGlyph kind={icon} />
+                    <span className="skill-icon-mono">{getSkillMonogram(skill.title)}</span>
                   </div>
                   <div className="skill-info">
                     <h3 className="skill-name">{skill.title}</h3>

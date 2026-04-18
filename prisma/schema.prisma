@@ -31,6 +31,10 @@ model User {
   downloads     Download[]
   comments      Comment[]
   commentLikes  CommentLike[]
+  feedbackThreads FeedbackThread[]
+  feedbackReplies FeedbackReply[]
+  feedbackVotes FeedbackVote[]
+  feedbackReplyVotes FeedbackReplyVote[]
   eventLogs     EventLog[]
   
   @@unique([provider, providerAccountId])
@@ -166,6 +170,89 @@ model CommentLike {
   @@unique([commentId, userId])
   @@index([userId])
   @@map("comment_likes")
+}
+
+model FeedbackThread {
+  id            String    @id @default(uuid())
+  title         String
+  content       String    @db.Text
+  status        String    @default("open") // open, closed
+  upvoteCount   Int       @default(0)
+  downvoteCount Int       @default(0)
+  replyCount    Int       @default(0)
+  pinnedReplyId String?
+  userId        String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replies       FeedbackReply[] @relation("ThreadReplies")
+  pinnedReply   FeedbackReply?  @relation("PinnedFeedbackReply", fields: [pinnedReplyId], references: [id], onDelete: SetNull)
+  votes         FeedbackVote[]
+
+  @@index([createdAt])
+  @@index([upvoteCount, createdAt])
+  @@index([userId, createdAt])
+  @@index([pinnedReplyId])
+  @@map("feedback_threads")
+}
+
+model FeedbackReply {
+  id            String    @id @default(uuid())
+  content       String    @db.Text
+  threadId      String
+  parentId      String?
+  userId        String
+  upvoteCount   Int       @default(0)
+  downvoteCount Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  thread        FeedbackThread @relation("ThreadReplies", fields: [threadId], references: [id], onDelete: Cascade)
+  parent        FeedbackReply? @relation("FeedbackReplyToParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children      FeedbackReply[] @relation("FeedbackReplyToParent")
+  pinnedByThread FeedbackThread[] @relation("PinnedFeedbackReply")
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  votes         FeedbackReplyVote[]
+
+  @@index([threadId, createdAt])
+  @@index([parentId])
+  @@index([userId, createdAt])
+  @@map("feedback_replies")
+}
+
+model FeedbackVote {
+  id            String    @id @default(uuid())
+  threadId      String
+  userId        String
+  value         Int       // 1: 赞, -1: 踩
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  thread        FeedbackThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, userId])
+  @@index([userId])
+  @@index([threadId, value])
+  @@map("feedback_votes")
+}
+
+model FeedbackReplyVote {
+  id            String    @id @default(uuid())
+  replyId       String
+  userId        String
+  value         Int       // 1: 赞, -1: 踩
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  reply         FeedbackReply @relation(fields: [replyId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([replyId, userId])
+  @@index([userId])
+  @@index([replyId, value])
+  @@map("feedback_reply_votes")
 }
 
 model EventLog {
