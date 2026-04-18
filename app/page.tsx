@@ -8,12 +8,6 @@ import { getFallbackSkillCategories } from '@/lib/category-presets';
 import { formatNumber } from '@/lib/utils';
 
 const ALL_CATEGORY_ID = 'all';
-const FEATURED_DOWNLOAD = {
-  title: 'alicode-pages-deploy.skill.zip',
-  url: '/downloads/alicode-pages-deploy.skill.zip',
-  size: '2.9 KB',
-  description: '一键部署相关资源包，已上架为可直接下载文件。',
-};
 
 type IconKind = 'data' | 'content' | 'office' | 'dev' | 'image' | 'marketing' | 'generic';
 
@@ -304,20 +298,6 @@ export default function HomePage() {
           </button>
         ))}
       </div>
-
-      <section className="content-section">
-        <div className="featured-upload-card">
-          <div className="featured-upload-meta">
-            <span className="skill-category">精选上架</span>
-            <span className="featured-upload-size">ZIP · {FEATURED_DOWNLOAD.size}</span>
-          </div>
-          <h2 className="section-title">{FEATURED_DOWNLOAD.title}</h2>
-          <p>{FEATURED_DOWNLOAD.description}</p>
-          <a href={FEATURED_DOWNLOAD.url} download className="download-btn featured-download-btn">
-            下载 Skill 包
-          </a>
-        </div>
-      </section>
 
       <section className="content-section">
         <div className="section-header">
