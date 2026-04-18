@@ -125,6 +125,9 @@ export default function HomePage() {
 
     async function fetchInitialData() {
       const hasCache = readCachedState();
+      if (hasCache && mounted) {
+        setLoading(false);
+      }
 
       try {
         if (!hasCache) {

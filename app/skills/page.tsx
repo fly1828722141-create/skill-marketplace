@@ -139,6 +139,7 @@ function SkillsContent() {
           .toLowerCase()}`;
 
         if (!silent) {
+          let hasCache = false;
           if (typeof window !== 'undefined') {
             const cachedSkillsRaw = window.localStorage.getItem(cacheKey);
             if (cachedSkillsRaw) {
@@ -147,13 +148,14 @@ function SkillsContent() {
                 if (Array.isArray(cachedSkills) && cachedSkills.length > 0 && mounted) {
                   setSkills(cachedSkills as Skill[]);
                   setTotal(cachedSkills.length);
+                  hasCache = true;
                 }
               } catch (error) {
                 console.error('读取技能库缓存失败:', error);
               }
             }
           }
-          setLoading(true);
+          setLoading(!hasCache);
         }
 
         if (mineOnly && status !== 'loading' && !session?.user?.id) {
