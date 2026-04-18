@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
     if (keyword) {
       where.OR = [
         { title: { contains: keyword } },
+        { summary: { contains: keyword } },
         { description: { contains: keyword } },
       ];
     }
@@ -122,10 +123,47 @@ export async function GET(request: NextRequest) {
       prisma.skill.count({ where }),
     ]);
 
-    const normalizedSkills = skills.map((skill) => ({
-      ...skill,
-      tags: normalizeTagsFromDb(skill.tags),
-    }));
+    const skillIds = skills.map((skill) => skill.id);
+    const ratingRows =
+      skillIds.length > 0
+        ? await prisma.comment.groupBy({
+            by: ['skillId'],
+            where: {
+              skillId: {
+                in: skillIds,
+              },
+              rating: {
+                not: null,
+              },
+            },
+            _avg: {
+              rating: true,
+            },
+            _count: {
+              rating: true,
+            },
+          })
+        : [];
+
+    const ratingMap = new Map(
+      ratingRows.map((row) => [
+        row.skillId,
+        {
+          ratingAvg: row._avg.rating ?? null,
+          ratingCount: row._count.rating ?? 0,
+        },
+      ])
+    );
+
+    const normalizedSkills = skills.map((skill) => {
+      const ratingMeta = ratingMap.get(skill.id);
+      return {
+        ...skill,
+        tags: normalizeTagsFromDb(skill.tags),
+        ratingAvg: ratingMeta?.ratingAvg ?? null,
+        ratingCount: skill._count?.comments ?? 0,
+      };
+    });
     const totalPages = Math.ceil(total / pageSize);
 
     return NextResponse.json(

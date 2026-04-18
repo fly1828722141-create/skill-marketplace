@@ -76,9 +76,23 @@ export async function GET(
       throw error;
     }
 
+    const ratingAggregate = await prisma.comment.aggregate({
+      where: {
+        skillId,
+        rating: {
+          not: null,
+        },
+      },
+      _avg: {
+        rating: true,
+      },
+    });
+
     const normalizedSkill = {
       ...skill,
       tags: normalizeTagsFromDb(skill.tags),
+      ratingAvg: ratingAggregate._avg.rating ?? null,
+      ratingCount: skill._count?.comments ?? 0,
     };
 
     return NextResponse.json(successResponse(normalizedSkill));

@@ -194,7 +194,7 @@ function SkillsContent() {
               }
             >
               <h3>{skill.title}</h3>
-              <p>{skill.description}</p>
+              <p>{skill.summary || skill.description}</p>
               {(() => {
                 const isExternalLinkSkill =
                   skill.fileType?.toLowerCase() === 'link' || /^https?:\/\//i.test(skill.fileName);
@@ -202,6 +202,13 @@ function SkillsContent() {
                   <div className="skill-meta">
                     <span>📥 {formatNumber(skill.downloadCount)}</span>
                     <span>👁 {formatNumber(skill.viewCount)}</span>
+                    <span>
+                      ⭐{' '}
+                      {typeof skill.ratingAvg === 'number'
+                        ? skill.ratingAvg.toFixed(1)
+                        : '暂无评分'}
+                    </span>
+                    <span>📝 {formatNumber(skill.ratingCount ?? skill._count?.comments ?? 0)} 评价</span>
                     <span>
                       {isExternalLinkSkill ? '🔗 外链' : `💾 ${formatFileSize(skill.fileSize)}`}
                     </span>
@@ -228,7 +235,7 @@ function SkillsContent() {
         .skill-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: translateY(-2px); }
         .skill-card h3 { font-size: 18px; margin-bottom: 8px; color: #1890ff; }
         .skill-card p { font-size: 14px; color: #666; margin-bottom: 16px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-        .skill-meta { display: flex; gap: 16px; font-size: 13px; color: #999; margin-bottom: 12px; }
+        .skill-meta { display: flex; gap: 10px 14px; flex-wrap: wrap; font-size: 13px; color: #999; margin-bottom: 12px; }
         .skill-footer { display: flex; justify-content: space-between; font-size: 12px; color: #999; }
         .loading, .empty-state { text-align: center; padding: 60px; color: #999; }
       `}</style>

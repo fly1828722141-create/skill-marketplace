@@ -119,6 +119,33 @@ export default function SkillDetailPage() {
     }
   }
 
+  async function handleCopyText(value: string, successMessage: string) {
+    try {
+      if (!value) {
+        return;
+      }
+
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const input = document.createElement('textarea');
+        input.value = value;
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.focus();
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+      }
+
+      message.success(successMessage);
+    } catch (error) {
+      console.error('复制失败:', error);
+      message.error('复制失败，请手动复制');
+    }
+  }
+
   if (loading) {
     return <div className="loading-page">加载中...</div>;
   }
@@ -150,14 +177,25 @@ export default function SkillDetailPage() {
             <div className="skill-header-top">
               <h1 className="skill-title">{skill.title}</h1>
               {sourceUrl ? (
-                <a
-                  href={sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="source-pill"
-                >
-                  来源：{sourceHost || '外部链接'}
-                </a>
+                <div className="source-actions">
+                  <a
+                    href={sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="source-pill"
+                  >
+                    来源：{sourceHost || '外部链接'}
+                  </a>
+                  <button
+                    type="button"
+                    className="copy-compact-btn"
+                    aria-label="复制来源链接"
+                    onClick={() => void handleCopyText(sourceUrl, '来源链接已复制')}
+                  >
+                    <span>复制</span>
+                    <CopyIcon />
+                  </button>
+                </div>
               ) : null}
             </div>
 
@@ -171,29 +209,34 @@ export default function SkillDetailPage() {
             </div>
 
             <div className="skill-tags">
-              {skill.tags.map((tag, index) => (
-                <span key={index} className="tag">
-                  {tag}
-                </span>
-              ))}
+              <span className="skill-type-label">Skill 类型</span>
+              <span className="tag">{skill.category?.name || '未分类'}</span>
             </div>
           </div>
 
           {installCommand ? (
             <div className="install-card">
-              <div className="install-label">INSTALLATION</div>
+              <div className="install-head">
+                <div className="install-label">INSTALL</div>
+                <button
+                  type="button"
+                  className="copy-btn"
+                  onClick={() => void handleCopyText(installCommand, '安装命令已复制')}
+                >
+                  <CopyIcon />
+                  一键复制
+                </button>
+              </div>
               <pre className="install-code">
                 <code>{installCommand}</code>
               </pre>
             </div>
           ) : null}
 
-          {skill.summary ? (
-            <div className="skill-description-card">
-              <h3>✨ 功能简介</h3>
-              <p className="description-text">{skill.summary}</p>
-            </div>
-          ) : null}
+          <div className="skill-description-card">
+            <h3>✨ 功能简介</h3>
+            <p className="description-text">{skill.summary || '暂无功能简介'}</p>
+          </div>
 
           <div className="skill-description-card doc-surface">
             <div className="doc-surface-head">
@@ -228,6 +271,16 @@ export default function SkillDetailPage() {
               <div className="stat-item">
                 <div className="stat-value">{formatNumber(skill.downloadCount)}</div>
                 <div className="stat-label">下载</div>
+              </div>
+              <div className="stat-item">
+                <div className="stat-value">{formatRating(skill.ratingAvg)}</div>
+                <div className="stat-label">评分</div>
+              </div>
+              <div className="stat-item">
+                <div className="stat-value">
+                  {formatNumber(skill.ratingCount ?? skill._count?.comments ?? 0)}
+                </div>
+                <div className="stat-label">评价人数</div>
               </div>
             </div>
           </div>
@@ -304,15 +357,23 @@ export default function SkillDetailPage() {
         }
 
         .skill-title {
-          font-size: 46px;
-          line-height: 1.05;
+          font-size: 38px;
+          line-height: 1.15;
           letter-spacing: -0.8px;
           margin: 0;
           word-break: break-word;
         }
 
+        .source-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+
         .source-pill {
-          flex-shrink: 0;
+          flex-shrink: 1;
           border-radius: 999px;
           padding: 8px 12px;
           font-size: 12px;
@@ -321,10 +382,32 @@ export default function SkillDetailPage() {
           background: rgba(0, 122, 255, 0.12);
           border: 1px solid rgba(0, 122, 255, 0.2);
           text-decoration: none;
+          white-space: normal;
+          overflow-wrap: anywhere;
         }
 
         .source-pill:hover {
           background: rgba(0, 122, 255, 0.18);
+        }
+
+        .copy-compact-btn {
+          border: 1px solid rgba(12, 86, 170, 0.25);
+          background: #fff;
+          color: #0f4f99;
+          border-radius: 999px;
+          padding: 7px 10px;
+          font-size: 12px;
+          font-weight: 600;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          cursor: pointer;
+          transition: var(--transition);
+        }
+
+        .copy-compact-btn:hover {
+          border-color: rgba(12, 86, 170, 0.45);
+          background: rgba(0, 122, 255, 0.08);
         }
 
         .skill-meta {
@@ -347,6 +430,13 @@ export default function SkillDetailPage() {
           display: flex;
           flex-wrap: wrap;
           gap: 8px;
+          align-items: center;
+        }
+
+        .skill-type-label {
+          font-size: 12px;
+          color: var(--text-secondary);
+          font-weight: 600;
         }
 
         .tag {
@@ -360,47 +450,83 @@ export default function SkillDetailPage() {
 
         .install-card {
           border-radius: 18px;
-          background: radial-gradient(
-              ellipse at top right,
-              rgba(75, 127, 255, 0.22),
-              rgba(15, 17, 28, 0.22) 42%
-            ),
-            linear-gradient(180deg, #101317 0%, #0a0d11 100%);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          box-shadow: 0 22px 50px rgba(0, 0, 0, 0.28);
+          background: linear-gradient(
+            180deg,
+            rgba(255, 255, 255, 0.98) 0%,
+            rgba(245, 250, 255, 0.95) 100%
+          );
+          border: 1px solid rgba(11, 76, 152, 0.14);
+          box-shadow: 0 10px 28px rgba(16, 61, 113, 0.1);
           padding: 16px 18px;
           margin-bottom: 14px;
-          color: #f0f5ff;
+          color: #17395f;
+        }
+
+        .install-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 10px;
         }
 
         .install-label {
-          font-size: 12px;
-          letter-spacing: 1.6px;
+          font-size: 11px;
+          letter-spacing: 1.2px;
           text-transform: uppercase;
-          color: rgba(226, 235, 255, 0.72);
-          margin-bottom: 10px;
+          color: #3b618d;
+          font-weight: 700;
+        }
+
+        .copy-btn {
+          border: 1px solid rgba(12, 86, 170, 0.25);
+          background: #fff;
+          color: #0f4f99;
+          border-radius: 10px;
+          padding: 6px 10px;
+          font-size: 12px;
+          font-weight: 600;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          cursor: pointer;
+          transition: var(--transition);
+        }
+
+        .copy-btn:hover {
+          border-color: rgba(12, 86, 170, 0.45);
+          background: rgba(0, 122, 255, 0.08);
         }
 
         .install-code {
           margin: 0;
           border-radius: 12px;
-          background: rgba(255, 255, 255, 0.08);
-          border: 1px solid rgba(255, 255, 255, 0.12);
+          background: rgba(255, 255, 255, 0.9);
+          border: 1px solid rgba(12, 86, 170, 0.15);
           padding: 12px 14px;
-          overflow-x: auto;
+          white-space: pre-wrap;
+          word-break: break-word;
+          overflow-wrap: anywhere;
+          overflow-x: hidden;
         }
 
         .install-code code {
-          font-size: 17px;
-          color: #f5f8ff;
+          display: block;
+          font-size: 13px;
+          line-height: 1.65;
+          color: #11335b;
           font-family: 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', monospace;
+          white-space: inherit;
+          word-break: inherit;
         }
 
         .description-text {
-          font-size: 18px;
-          line-height: 1.75;
+          font-size: 15px;
+          line-height: 1.7;
           color: #2c3b4f;
           margin-top: 8px;
+          white-space: pre-wrap;
+          word-break: break-word;
         }
 
         .doc-surface {
@@ -417,7 +543,7 @@ export default function SkillDetailPage() {
         }
 
         .doc-surface-head h3 {
-          font-size: 19px;
+          font-size: 17px;
           margin: 0;
         }
 
@@ -459,7 +585,7 @@ export default function SkillDetailPage() {
         }
 
         .stat-value {
-          font-size: 24px;
+          font-size: 20px;
           line-height: 1.2;
           font-weight: 700;
           color: #0f3f82;
@@ -509,7 +635,7 @@ export default function SkillDetailPage() {
 
         @media (max-width: 680px) {
           .skill-title {
-            font-size: 30px;
+            font-size: 27px;
           }
 
           .skill-header-top {
@@ -521,12 +647,13 @@ export default function SkillDetailPage() {
             font-size: 12px;
           }
 
-          .install-code code {
+          .description-text {
             font-size: 14px;
           }
 
-          .description-text {
-            font-size: 16px;
+          .copy-btn,
+          .copy-compact-btn {
+            font-size: 11px;
           }
         }
       `}</style>
@@ -603,24 +730,24 @@ function DocRenderer({ blocks }: { blocks: DocBlock[] }) {
         }
 
         .doc-heading-l1 {
-          font-size: 30px;
+          font-size: 24px;
           font-weight: 800;
         }
 
         .doc-heading-l2 {
-          font-size: 25px;
+          font-size: 20px;
           font-weight: 700;
         }
 
         .doc-heading-l3 {
-          font-size: 20px;
+          font-size: 17px;
           font-weight: 700;
         }
 
         .doc-paragraph {
           margin: 10px 0;
-          font-size: 18px;
-          line-height: 1.82;
+          font-size: 14px;
+          line-height: 1.72;
           color: #2a3a4f;
           white-space: pre-wrap;
           word-break: break-word;
@@ -633,8 +760,8 @@ function DocRenderer({ blocks }: { blocks: DocBlock[] }) {
 
         .doc-list li {
           margin: 5px 0;
-          font-size: 18px;
-          line-height: 1.75;
+          font-size: 14px;
+          line-height: 1.7;
         }
 
         .doc-quote {
@@ -654,9 +781,11 @@ function DocRenderer({ blocks }: { blocks: DocBlock[] }) {
           border-radius: 12px;
           background: #101317;
           color: #f0f4ff;
-          font-size: 15px;
-          line-height: 1.65;
-          overflow-x: auto;
+          font-size: 12px;
+          line-height: 1.62;
+          white-space: pre-wrap;
+          word-break: break-word;
+          overflow-x: hidden;
         }
 
         .doc-code code {
@@ -681,7 +810,7 @@ function DocRenderer({ blocks }: { blocks: DocBlock[] }) {
 
         :global(.doc-inline-code) {
           font-family: 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', monospace;
-          font-size: 0.92em;
+          font-size: 0.86em;
           background: rgba(16, 30, 56, 0.08);
           border: 1px solid rgba(16, 30, 56, 0.12);
           border-radius: 6px;
@@ -690,20 +819,20 @@ function DocRenderer({ blocks }: { blocks: DocBlock[] }) {
 
         @media (max-width: 680px) {
           .doc-heading-l1 {
-            font-size: 24px;
+            font-size: 20px;
           }
 
           .doc-heading-l2 {
-            font-size: 21px;
+            font-size: 18px;
           }
 
           .doc-heading-l3 {
-            font-size: 18px;
+            font-size: 16px;
           }
 
           .doc-paragraph,
           .doc-list li {
-            font-size: 16px;
+            font-size: 13px;
           }
         }
       `}</style>
@@ -879,6 +1008,10 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
+function formatRating(value?: number | null): string {
+  return typeof value === 'number' ? value.toFixed(1) : '--';
+}
+
 function safeHost(value: string): string {
   try {
     return new URL(value).hostname;
@@ -900,4 +1033,23 @@ function buildInstallCommand(sourceUrl: string, title: string): string {
     .replace(/^-+|-+$/g, '');
   const skillSlug = preferredSlugMatch?.[0] || simpleSlug || 'skill-name';
   return `npx skills add ${repoUrl} --skill ${skillSlug}`;
+}
+
+function CopyIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
 }

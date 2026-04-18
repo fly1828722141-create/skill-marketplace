@@ -63,6 +63,10 @@ function pickIconMeta(category: string) {
   return CATEGORY_ICON[category] ?? CATEGORY_ICON.默认;
 }
 
+function formatRating(rating?: number | null) {
+  return typeof rating === 'number' ? rating.toFixed(1) : '暂无';
+}
+
 export default function HomePage() {
   const router = useRouter();
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -169,6 +173,7 @@ export default function HomePage() {
       const keywordMatch =
         !normalizedKeyword ||
         skill.title.toLowerCase().includes(normalizedKeyword) ||
+        (skill.summary || '').toLowerCase().includes(normalizedKeyword) ||
         skill.description.toLowerCase().includes(normalizedKeyword) ||
         (skill.tags || []).some((tag) => tag.toLowerCase().includes(normalizedKeyword));
 
@@ -457,7 +462,7 @@ function SkillGrid({
                 <span className="skill-category">{category}</span>
               </div>
             </div>
-            <p className="skill-desc">{skill.description}</p>
+            <p className="skill-desc">{skill.summary || skill.description}</p>
             <div className="skill-footer">
               <div className="skill-stats">
                 <span className="stat">
@@ -467,6 +472,14 @@ function SkillGrid({
                 <span className="stat">
                   <span className="stat-icon">浏览</span>
                   {formatNumber(skill.viewCount)}
+                </span>
+                <span className="stat">
+                  <span className="stat-icon">评分</span>
+                  {formatRating(skill.ratingAvg)}
+                </span>
+                <span className="stat">
+                  <span className="stat-icon">评价</span>
+                  {formatNumber(skill.ratingCount ?? skill._count?.comments ?? 0)}
                 </span>
               </div>
               <button
@@ -527,12 +540,12 @@ function SkillModal({
 
           <div className="modal-section">
             <h3>功能介绍</h3>
-            <p>{skill.description}</p>
+            <p>{skill.summary || '暂无功能简介'}</p>
           </div>
 
           <div className="modal-section">
-            <h3>标签</h3>
-            <p>{skill.tags?.length ? skill.tags.join('、') : '暂无标签'}</p>
+            <h3>Skill 类型</h3>
+            <p>{category}</p>
           </div>
 
           <div className="modal-stats">
@@ -545,8 +558,10 @@ function SkillModal({
               <div className="modal-stat-label">浏览次数</div>
             </div>
             <div className="modal-stat">
-              <div className="modal-stat-value">{formatNumber(skill.fileSize)}</div>
-              <div className="modal-stat-label">文件大小 (B)</div>
+              <div className="modal-stat-value">{formatRating(skill.ratingAvg)}</div>
+              <div className="modal-stat-label">
+                评分（{formatNumber(skill.ratingCount ?? skill._count?.comments ?? 0)} 人）
+              </div>
             </div>
           </div>
 

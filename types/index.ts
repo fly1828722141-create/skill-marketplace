@@ -46,6 +46,8 @@ export interface Skill {
   fileType: string;
   downloadCount: number;
   viewCount: number;
+  ratingAvg?: number | null;
+  ratingCount?: number;
   status: 'active' | 'archived' | 'deleted';
   authorId: string;
   author?: User;
