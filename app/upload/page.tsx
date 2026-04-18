@@ -122,11 +122,6 @@ export default function UploadPage() {
       return;
     }
 
-    if (isFileMode && ossConfigured === false) {
-      message.error('上传服务暂未配置完成，请联系管理员设置 OSS 密钥');
-      return;
-    }
-
     if (isFileMode && !file) {
       message.error('请选择要上传的文件');
       return;
@@ -229,9 +224,7 @@ export default function UploadPage() {
   const isFileMode = sourceMode === 'file';
   const normalizedExternalUrl = normalizeExternalLinkInput(externalUrl);
   const submitBlockedReason =
-    isFileMode && ossConfigured === false
-      ? '上传服务配置中：缺少 OSS 存储密钥，请联系管理员'
-      : !formData.title.trim()
+    !formData.title.trim()
       ? '请先填写标题'
       : summaryLength < 10
       ? '功能简介至少 10 个字'
@@ -420,8 +413,8 @@ export default function UploadPage() {
               </div>
 
               {sourceMode === 'file' && ossConfigured === false ? (
-                <div className="upload-config-banner" role="alert">
-                  上传服务尚未配置完成，当前环境缺少 OSS 密钥，暂时无法提交上传。
+                <div className="upload-config-banner upload-config-banner-info" role="status">
+                  当前未配置 OSS，系统将自动使用内置存储完成文件上传。
                 </div>
               ) : null}
 
@@ -518,6 +511,12 @@ export default function UploadPage() {
                 <span>当前分类</span>
                 <strong>{selectedCategoryName}</strong>
               </div>
+              {sourceMode === 'file' ? (
+                <div className="upload-panel-stat">
+                  <span>文件存储</span>
+                  <strong>{ossConfigured === false ? '内置存储' : 'OSS 存储'}</strong>
+                </div>
+              ) : null}
               {sourceMode === 'link' ? (
                 <div className="upload-panel-stat">
                   <span>链接域名</span>

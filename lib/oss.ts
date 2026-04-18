@@ -44,8 +44,14 @@ const ossConfig = {
   bucket: readEnv('OSS_BUCKET', 'skill-marketplace'),
 };
 
+export type FileStorageMode = 'oss' | 'database';
+
 export function isOSSConfigured(): boolean {
   return Boolean(ossConfig.accessKeyId && ossConfig.accessKeySecret);
+}
+
+export function getFileStorageMode(): FileStorageMode {
+  return isOSSConfigured() ? 'oss' : 'database';
 }
 
 // 创建 OSS 客户端实例

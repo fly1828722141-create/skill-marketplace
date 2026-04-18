@@ -80,11 +80,26 @@ model Skill {
   updatedAt     DateTime  @updatedAt
   
   // 关联关系
+  fileBlob      SkillFileBlob?
   downloads     Download[]
   comments      Comment[]
   eventLogs     EventLog[]
   
   @@map("skills")
+}
+
+model SkillFileBlob {
+  id            String    @id @default(uuid())
+  skillId       String    @unique
+  fileData      Bytes
+  originalName  String
+  mimeType      String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  skill         Skill     @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@map("skill_file_blobs")
 }
 
 // ===========================================

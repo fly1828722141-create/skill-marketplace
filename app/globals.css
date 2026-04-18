@@ -1942,6 +1942,12 @@ button {
   font-weight: 600;
 }
 
+.upload-config-banner.upload-config-banner-info {
+  border-color: rgba(0, 122, 255, 0.24);
+  background: rgba(0, 122, 255, 0.08);
+  color: #0c4f9b;
+}
+
 .upload-submit-btn {
   min-width: 140px;
   border-radius: 12px;

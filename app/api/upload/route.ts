@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { uploadFile, validateFile } from '@/lib/oss';
+import { isOSSConfigured, uploadFile, validateFile } from '@/lib/oss';
 import prisma from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { ensureDefaultCategories } from '@/lib/skill-categories';
@@ -97,6 +97,14 @@ export async function POST(request: NextRequest) {
     let storedFileSize = 0;
     let storedFileType = '';
     let fileUrl = '';
+    let localFileBlob:
+      | {
+          fileData: Buffer;
+          originalName: string;
+          mimeType: string | null;
+        }
+      | null = null;
+    const useOssStorage = !isLinkMode && isOSSConfigured();
 
     if (isLinkMode) {
       const normalizedUrl = new URL(externalUrlInput).toString();
@@ -124,30 +132,61 @@ export async function POST(request: NextRequest) {
       const safeFileName = sanitizeFileName(selectedFile.name);
       const uniqueFileName = `${Date.now()}-${safeFileName}`;
 
-      // 上传到 OSS
-      const uploadResult = await uploadFile(buffer, uniqueFileName, selectedFile.type);
-      storedFileName = uploadResult.fileName;
-      storedFileSize = uploadResult.fileSize;
       storedFileType = selectedFile.name.toLowerCase().endsWith('.tar.gz')
         ? 'tar.gz'
         : selectedFile.name.split('.').pop() || '';
-      fileUrl = uploadResult.url;
+
+      if (useOssStorage) {
+        // 优先上传到 OSS
+        const uploadResult = await uploadFile(buffer, uniqueFileName, selectedFile.type);
+        storedFileName = uploadResult.fileName;
+        storedFileSize = uploadResult.fileSize;
+        fileUrl = uploadResult.url;
+      } else {
+        // OSS 未配置时，兜底存入数据库
+        storedFileName = selectedFile.name;
+        storedFileSize = selectedFile.size;
+        localFileBlob = {
+          fileData: buffer,
+          originalName: selectedFile.name,
+          mimeType: selectedFile.type || null,
+        };
+      }
     }
 
-    // 创建技能包记录
-    const skill = await prisma.skill.create({
-      data: {
-        title,
-        summary: summary.trim(),
-        description,
-        categoryId: category.id,
-        tags: toPrismaTagsValue(tags, prisma) as any,
-        fileName: storedFileName,
-        fileSize: storedFileSize,
-        fileType: storedFileType,
-        authorId: currentUser.id,
-        status: 'active',
-      },
+    // 创建技能记录，并在需要时写入数据库文件
+    const createdSkill = await prisma.$transaction(async (tx) => {
+      const created = await tx.skill.create({
+        data: {
+          title,
+          summary: summary.trim(),
+          description,
+          categoryId: category.id,
+          tags: toPrismaTagsValue(tags, prisma) as any,
+          fileName: storedFileName,
+          fileSize: storedFileSize,
+          fileType: storedFileType,
+          authorId: currentUser.id,
+          status: 'active',
+        },
+      });
+
+      if (localFileBlob) {
+        await tx.skillFileBlob.create({
+          data: {
+            skillId: created.id,
+            fileData: localFileBlob.fileData,
+            originalName: localFileBlob.originalName,
+            mimeType: localFileBlob.mimeType,
+          },
+        });
+      }
+
+      return created;
+    });
+
+    const skill = await prisma.skill.findUnique({
+      where: { id: createdSkill.id },
       include: {
         author: {
           select: {
@@ -168,6 +207,17 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    if (!skill) {
+      return NextResponse.json(
+        errorResponse('上传成功但读取结果失败，请刷新后查看', 'UPLOAD_RESULT_MISSING'),
+        { status: 500 }
+      );
+    }
+
+    if (localFileBlob) {
+      fileUrl = `/api/download/file?skillId=${createdSkill.id}`;
+    }
+
     const normalizedSkill = {
       ...skill,
       tags: normalizeTagsFromDb(skill.tags),
@@ -185,6 +235,7 @@ export async function POST(request: NextRequest) {
         fileType: storedFileType,
         fileSize: storedFileSize,
         sourceMode: isLinkMode ? 'link' : 'file',
+        storageMode: isLinkMode ? 'link' : useOssStorage ? 'oss' : 'database',
       },
     });
 

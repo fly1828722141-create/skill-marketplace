@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
-import { uploadFile } from '@/lib/oss';
+import { isOSSConfigured, uploadFile } from '@/lib/oss';
 import { recordEvent } from '@/lib/event-log';
 import { errorResponse, sanitizeFileName, successResponse } from '@/lib/utils';
 
@@ -145,6 +145,8 @@ export async function POST(
     const rawRating = formData.get('rating');
     const rating = getValidRating(rawRating);
     const imageFiles = getImageFiles(formData);
+    const useOssStorage = isOSSConfigured();
+    const maxImageSize = useOssStorage ? MAX_IMAGE_SIZE : 2 * 1024 * 1024;
 
     if (rawRating !== null && rawRating !== '' && rating === null) {
       return NextResponse.json(
@@ -182,9 +184,12 @@ export async function POST(
         );
       }
 
-      if (image.size > MAX_IMAGE_SIZE) {
+      if (image.size > maxImageSize) {
         return NextResponse.json(
-          errorResponse('单张图片不能超过 5MB', 'VALIDATION_ERROR'),
+          errorResponse(
+            `单张图片不能超过 ${Math.floor(maxImageSize / 1024 / 1024)}MB`,
+            'VALIDATION_ERROR'
+          ),
           { status: 400 }
         );
       }
@@ -195,6 +200,18 @@ export async function POST(
         const safeName = sanitizeFileName(image.name || `review-${index + 1}.png`);
         const uniqueName = `review-${Date.now()}-${index + 1}-${safeName}`;
         const buffer = Buffer.from(await image.arrayBuffer());
+
+        if (!useOssStorage) {
+          const mimeType = image.type || 'image/png';
+          const dataUrl = `data:${mimeType};base64,${buffer.toString('base64')}`;
+
+          return {
+            url: dataUrl,
+            fileName: `inline:${uniqueName}`,
+            sortOrder: index,
+          };
+        }
+
         const uploadResult = await uploadFile(buffer, uniqueName, image.type);
 
         return {

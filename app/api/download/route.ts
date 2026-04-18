@@ -123,6 +123,10 @@ export async function POST(request: NextRequest) {
     }
 
     let downloadUrl = '';
+    const localFileBlob = await prisma.skillFileBlob.findUnique({
+      where: { skillId },
+      select: { id: true },
+    });
     const isExternalLinkSkill =
       skill.fileType?.toLowerCase() === 'link' || /^https?:\/\//i.test(skill.fileName);
 
@@ -135,9 +139,13 @@ export async function POST(request: NextRequest) {
       }
       downloadUrl = skill.fileName;
     } else {
-      // 获取临时下载链接（有效期 1 小时）
-      const { generateTempUrl } = await import('@/lib/oss');
-      downloadUrl = await generateTempUrl(skill.fileName, 3600);
+      if (localFileBlob) {
+        downloadUrl = `/api/download/file?skillId=${encodeURIComponent(skill.id)}`;
+      } else {
+        // 获取临时下载链接（有效期 1 小时）
+        const { generateTempUrl } = await import('@/lib/oss');
+        downloadUrl = await generateTempUrl(skill.fileName, 3600);
+      }
     }
 
     return NextResponse.json(
