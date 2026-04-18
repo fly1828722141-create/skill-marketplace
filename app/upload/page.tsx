@@ -432,12 +432,11 @@ export default function UploadPage() {
                   </label>
                   <input
                     id="externalUrl"
-                    type="url"
+                    type="text"
                     className="input"
                     placeholder="例如：https://skills.sh/sickn33/antigravity-awesome-skills/data-scientist"
                     value={externalUrl}
                     onChange={(e) => setExternalUrl(e.target.value)}
-                    required
                   />
                   <p className="help-text">
                     可直接粘贴 URL，或粘贴包含 URL 的命令文本，系统会自动提取链接。
