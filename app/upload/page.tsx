@@ -142,7 +142,7 @@ export default function UploadPage() {
       return;
     }
 
-    const normalizedExternalUrl = externalUrl.trim();
+    const normalizedExternalUrl = normalizeExternalLinkInput(externalUrl);
     if (!isFileMode) {
       if (!normalizedExternalUrl) {
         message.error('请粘贴可访问的 Skill 链接');
@@ -227,7 +227,7 @@ export default function UploadPage() {
   const selectedCategoryName =
     categories.find((item) => item.id === formData.categoryId)?.name || '未选择';
   const isFileMode = sourceMode === 'file';
-  const normalizedExternalUrl = externalUrl.trim();
+  const normalizedExternalUrl = normalizeExternalLinkInput(externalUrl);
   const submitBlockedReason =
     isFileMode && ossConfigured === false
       ? '上传服务配置中：缺少 OSS 存储密钥，请联系管理员'
@@ -440,7 +440,7 @@ export default function UploadPage() {
                     required
                   />
                   <p className="help-text">
-                    粘贴可公开访问的链接即可发布，下载时会跳转到该链接。
+                    可直接粘贴 URL，或粘贴包含 URL 的命令文本，系统会自动提取链接。
                   </p>
                 </div>
               ) : (
@@ -582,4 +582,15 @@ function extractHost(input: string): string {
   } catch {
     return '';
   }
+}
+
+function normalizeExternalLinkInput(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed) return '';
+  if (isHttpUrl(trimmed)) return trimmed;
+
+  const urlMatch = trimmed.match(/https?:\/\/[^\s"'<>]+/i);
+  if (!urlMatch) return '';
+
+  return urlMatch[0].replace(/[),.;!?]+$/g, '');
 }

@@ -175,7 +175,7 @@ export async function POST(request: NextRequest) {
     } = body;
     const normalizedTags = parseTagsInput(tags);
     const normalizedExternalUrl =
-      typeof externalUrl === 'string' ? externalUrl.trim() : '';
+      typeof externalUrl === 'string' ? normalizeExternalLinkInput(externalUrl) : '';
     const isLinkMode = Boolean(normalizedExternalUrl);
     let normalizedFileName = fileName;
     let normalizedFileSize = fileSize;
@@ -318,4 +318,15 @@ function isHttpUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function normalizeExternalLinkInput(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed) return '';
+  if (isHttpUrl(trimmed)) return trimmed;
+
+  const urlMatch = trimmed.match(/https?:\/\/[^\s"'<>]+/i);
+  if (!urlMatch) return '';
+
+  return urlMatch[0].replace(/[),.;!?]+$/g, '');
 }

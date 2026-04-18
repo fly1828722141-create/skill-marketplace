@@ -36,7 +36,8 @@ export async function POST(request: NextRequest) {
     const description = formData.get('description') as string;
     const categoryId = formData.get('categoryId') as string;
     const tagsInput = formData.get('tags');
-    const externalUrlInput = ((formData.get('externalUrl') as string) || '').trim();
+    const externalUrlRaw = ((formData.get('externalUrl') as string) || '').trim();
+    const externalUrlInput = normalizeExternalLinkInput(externalUrlRaw);
 
     // 验证必填字段
     if (!title || !summary || !description || !categoryId) {
@@ -229,4 +230,15 @@ function inferFileTypeFromUrl(value: string): string {
     // noop
   }
   return 'link';
+}
+
+function normalizeExternalLinkInput(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed) return '';
+  if (isHttpUrl(trimmed)) return trimmed;
+
+  const urlMatch = trimmed.match(/https?:\/\/[^\s"'<>]+/i);
+  if (!urlMatch) return '';
+
+  return urlMatch[0].replace(/[),.;!?]+$/g, '');
 }
