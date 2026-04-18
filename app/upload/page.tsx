@@ -18,6 +18,8 @@ export default function UploadPage() {
   const { data: session, status } = useSession();
   const [loading, setLoading] = useState(false);
   const [ossConfigured, setOssConfigured] = useState<boolean | null>(null);
+  const [sourceMode, setSourceMode] = useState<'link' | 'file'>('link');
+  const [externalUrl, setExternalUrl] = useState('');
   const [categories, setCategories] = useState<SkillCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [formData, setFormData] = useState({
@@ -112,6 +114,7 @@ export default function UploadPage() {
   // ===========================================
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const isFileMode = sourceMode === 'file';
 
     if (!session?.user) {
       message.warning('请先登录 Google 账号后再上传');
@@ -119,12 +122,12 @@ export default function UploadPage() {
       return;
     }
 
-    if (ossConfigured === false) {
+    if (isFileMode && ossConfigured === false) {
       message.error('上传服务暂未配置完成，请联系管理员设置 OSS 密钥');
       return;
     }
 
-    if (!file) {
+    if (isFileMode && !file) {
       message.error('请选择要上传的文件');
       return;
     }
@@ -139,17 +142,36 @@ export default function UploadPage() {
       return;
     }
 
+    const normalizedExternalUrl = externalUrl.trim();
+    if (!isFileMode) {
+      if (!normalizedExternalUrl) {
+        message.error('请粘贴可访问的 Skill 链接');
+        return;
+      }
+
+      if (!isHttpUrl(normalizedExternalUrl)) {
+        message.error('链接格式不正确，仅支持 http/https 链接');
+        return;
+      }
+    }
+
     setLoading(true);
 
     try {
       // 创建 FormData
       const uploadData = new FormData();
-      uploadData.append('file', file);
+      uploadData.append('sourceMode', sourceMode);
       uploadData.append('title', formData.title);
       uploadData.append('summary', formData.summary);
       uploadData.append('categoryId', formData.categoryId);
       uploadData.append('description', formData.description);
       uploadData.append('tags', formData.tags);
+
+      if (isFileMode && file) {
+        uploadData.append('file', file);
+      } else {
+        uploadData.append('externalUrl', normalizedExternalUrl);
+      }
 
       // 上传文件
       const response = await fetch('/api/upload', {
@@ -160,7 +182,7 @@ export default function UploadPage() {
       const result = await response.json().catch(() => null);
 
       if (response.ok && result?.success) {
-        message.success('上传成功！');
+        message.success(isFileMode ? '上传成功！' : '链接发布成功！');
         router.push(`/skills/${result.data.skill.id}`);
       } else {
         message.error(result?.error || '上传失败，请稍后重试');
@@ -204,8 +226,10 @@ export default function UploadPage() {
   const summaryLength = formData.summary.trim().length;
   const selectedCategoryName =
     categories.find((item) => item.id === formData.categoryId)?.name || '未选择';
+  const isFileMode = sourceMode === 'file';
+  const normalizedExternalUrl = externalUrl.trim();
   const submitBlockedReason =
-    ossConfigured === false
+    isFileMode && ossConfigured === false
       ? '上传服务配置中：缺少 OSS 存储密钥，请联系管理员'
       : !formData.title.trim()
       ? '请先填写标题'
@@ -217,8 +241,12 @@ export default function UploadPage() {
       ? '请先选择 Skill 类型'
       : !formData.description.trim()
       ? '请先填写描述'
-      : !file
+      : isFileMode && !file
       ? '请先选择 Skill 压缩包文件（.zip/.tar.gz/.rar/.7z）'
+      : !isFileMode && !normalizedExternalUrl
+      ? '请先粘贴 Skill 链接'
+      : !isFileMode && !isHttpUrl(normalizedExternalUrl)
+      ? '链接格式不正确，仅支持 http/https'
       : null;
 
   if (status === 'loading') {
@@ -368,49 +396,88 @@ export default function UploadPage() {
 
             <div className="upload-section">
               <div className="upload-section-head">
-                <h2>文件上传</h2>
-                <p>支持压缩包格式，单文件最大 50MB。</p>
+                <h2>发布方式</h2>
+                <p>支持两种发布方式：直接贴链接，或上传压缩包文件。</p>
               </div>
 
-              {ossConfigured === false ? (
+              <div className="upload-mode-switch" role="tablist" aria-label="发布方式">
+                <button
+                  type="button"
+                  className={`upload-mode-option ${sourceMode === 'link' ? 'active' : ''}`}
+                  onClick={() => setSourceMode('link')}
+                  aria-selected={sourceMode === 'link'}
+                >
+                  🔗 链接发布
+                </button>
+                <button
+                  type="button"
+                  className={`upload-mode-option ${sourceMode === 'file' ? 'active' : ''}`}
+                  onClick={() => setSourceMode('file')}
+                  aria-selected={sourceMode === 'file'}
+                >
+                  📦 文件上传
+                </button>
+              </div>
+
+              {sourceMode === 'file' && ossConfigured === false ? (
                 <div className="upload-config-banner" role="alert">
                   上传服务尚未配置完成，当前环境缺少 OSS 密钥，暂时无法提交上传。
                 </div>
               ) : null}
 
-              <div className="form-group">
-                <label htmlFor="file">
-                  技能包文件 <span className="required">*</span>
-                </label>
-                <label
-                  htmlFor="file"
-                  className={`upload-dropzone ${file ? 'is-selected' : ''}`}
-                >
-                  <span className="upload-drop-icon" aria-hidden="true">
-                    ⇪
-                  </span>
-                  <span className="upload-drop-title">
-                    {file ? '文件已就绪，点击可重新选择' : '点击选择 Skill 文件'}
-                  </span>
-                  <span className="upload-drop-subtitle">
-                    支持 .zip / .tar.gz / .rar / .7z
-                  </span>
-                </label>
-                <input
-                  id="file"
-                  type="file"
-                  className="upload-hidden-input"
-                  accept=".zip,.tar.gz,.rar,.7z"
-                  onChange={handleFileChange}
-                  disabled={loading}
-                />
-                {file && (
-                  <div className="upload-file-chip">
-                    <span className="upload-file-name">{file.name}</span>
-                    <span className="upload-file-size">{formatFileSize(file.size)}</span>
-                  </div>
-                )}
-              </div>
+              {sourceMode === 'link' ? (
+                <div className="form-group">
+                  <label htmlFor="externalUrl">
+                    Skill 链接 <span className="required">*</span>
+                  </label>
+                  <input
+                    id="externalUrl"
+                    type="url"
+                    className="input"
+                    placeholder="例如：https://skills.sh/sickn33/antigravity-awesome-skills/data-scientist"
+                    value={externalUrl}
+                    onChange={(e) => setExternalUrl(e.target.value)}
+                    required
+                  />
+                  <p className="help-text">
+                    粘贴可公开访问的链接即可发布，下载时会跳转到该链接。
+                  </p>
+                </div>
+              ) : (
+                <div className="form-group">
+                  <label htmlFor="file">
+                    技能包文件 <span className="required">*</span>
+                  </label>
+                  <label
+                    htmlFor="file"
+                    className={`upload-dropzone ${file ? 'is-selected' : ''}`}
+                  >
+                    <span className="upload-drop-icon" aria-hidden="true">
+                      ⇪
+                    </span>
+                    <span className="upload-drop-title">
+                      {file ? '文件已就绪，点击可重新选择' : '点击选择 Skill 文件'}
+                    </span>
+                    <span className="upload-drop-subtitle">
+                      支持 .zip / .tar.gz / .rar / .7z
+                    </span>
+                  </label>
+                  <input
+                    id="file"
+                    type="file"
+                    className="upload-hidden-input"
+                    accept=".zip,.tar.gz,.rar,.7z"
+                    onChange={handleFileChange}
+                    disabled={loading}
+                  />
+                  {file && (
+                    <div className="upload-file-chip">
+                      <span className="upload-file-name">{file.name}</span>
+                      <span className="upload-file-size">{formatFileSize(file.size)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="form-actions upload-form-actions">
                 <button
@@ -418,7 +485,13 @@ export default function UploadPage() {
                   className="btn btn-primary upload-submit-btn"
                   disabled={loading || Boolean(submitBlockedReason)}
                 >
-                  {loading ? '上传中...' : '确认上传'}
+                  {loading
+                    ? sourceMode === 'file'
+                      ? '上传中...'
+                      : '发布中...'
+                    : sourceMode === 'file'
+                    ? '确认上传'
+                    : '确认发布链接'}
                 </button>
                 <button
                   type="button"
@@ -439,9 +512,19 @@ export default function UploadPage() {
             <div className="upload-panel-card">
               <h3>发布预览</h3>
               <div className="upload-panel-stat">
+                <span>发布方式</span>
+                <strong>{sourceMode === 'link' ? '链接发布' : '文件上传'}</strong>
+              </div>
+              <div className="upload-panel-stat">
                 <span>当前分类</span>
                 <strong>{selectedCategoryName}</strong>
               </div>
+              {sourceMode === 'link' ? (
+                <div className="upload-panel-stat">
+                  <span>链接域名</span>
+                  <strong>{extractHost(externalUrl) || '未填写'}</strong>
+                </div>
+              ) : null}
               <div className="upload-panel-stat">
                 <span>简介字数</span>
                 <strong>{summaryLength}</strong>
@@ -482,4 +565,21 @@ function formatFileSize(bytes: number): string {
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function isHttpUrl(input: string): boolean {
+  try {
+    const parsed = new URL(input);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function extractHost(input: string): string {
+  try {
+    return new URL(input).hostname;
+  } catch {
+    return '';
+  }
 }

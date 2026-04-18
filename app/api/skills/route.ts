@@ -171,19 +171,18 @@ export async function POST(request: NextRequest) {
       fileName,
       fileSize,
       fileType,
+      externalUrl,
     } = body;
     const normalizedTags = parseTagsInput(tags);
+    const normalizedExternalUrl =
+      typeof externalUrl === 'string' ? externalUrl.trim() : '';
+    const isLinkMode = Boolean(normalizedExternalUrl);
+    let normalizedFileName = fileName;
+    let normalizedFileSize = fileSize;
+    let normalizedFileType = fileType;
 
     // 验证必填字段
-    if (
-      !title ||
-      !summary ||
-      !description ||
-      !categoryId ||
-      !fileName ||
-      !fileSize ||
-      !fileType
-    ) {
+    if (!title || !summary || !description || !categoryId) {
       return NextResponse.json(
         errorResponse('缺少必填字段', 'VALIDATION_ERROR'),
         { status: 400 }
@@ -195,6 +194,37 @@ export async function POST(request: NextRequest) {
         errorResponse('功能简介至少 10 个字', 'VALIDATION_ERROR'),
         { status: 400 }
       );
+    }
+
+    if (isLinkMode) {
+      if (!isHttpUrl(normalizedExternalUrl)) {
+        return NextResponse.json(
+          errorResponse('Skill 链接格式不正确，仅支持 http/https', 'VALIDATION_ERROR'),
+          { status: 400 }
+        );
+      }
+      normalizedFileName = normalizedExternalUrl;
+      normalizedFileSize = 0;
+      normalizedFileType = 'link';
+    } else if (
+      !normalizedFileName ||
+      normalizedFileSize === undefined ||
+      normalizedFileSize === null ||
+      !normalizedFileType
+    ) {
+      return NextResponse.json(
+        errorResponse('缺少文件信息或外部链接', 'VALIDATION_ERROR'),
+        { status: 400 }
+      );
+    } else {
+      const parsedFileSize = Number(normalizedFileSize);
+      if (!Number.isFinite(parsedFileSize) || parsedFileSize < 0) {
+        return NextResponse.json(
+          errorResponse('文件大小格式错误', 'VALIDATION_ERROR'),
+          { status: 400 }
+        );
+      }
+      normalizedFileSize = parsedFileSize;
     }
 
     await ensureDefaultCategories();
@@ -222,9 +252,9 @@ export async function POST(request: NextRequest) {
         description,
         categoryId: category.id,
         tags: toPrismaTagsValue(normalizedTags, prisma) as any,
-        fileName,
-        fileSize,
-        fileType,
+        fileName: normalizedFileName,
+        fileSize: normalizedFileSize,
+        fileType: normalizedFileType,
         authorId: currentUser.id,
         status: 'active',
       },
@@ -262,9 +292,9 @@ export async function POST(request: NextRequest) {
       skillId: skill.id,
       categoryId: skill.categoryId,
       metadata: {
-        fileType,
-        fileSize,
-        source: 'json-api',
+        fileType: normalizedFileType,
+        fileSize: normalizedFileSize,
+        source: isLinkMode ? 'json-api-link' : 'json-api',
       },
     });
 
@@ -278,5 +308,14 @@ export async function POST(request: NextRequest) {
       errorResponse('创建技能包失败', 'SKILL_CREATE_ERROR'),
       { status: 500 }
     );
+  }
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
   }
 }

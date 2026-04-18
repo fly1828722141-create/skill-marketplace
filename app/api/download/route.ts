@@ -103,15 +103,30 @@ export async function POST(request: NextRequest) {
       sessionId: typeof sessionId === 'string' ? sessionId : null,
     });
 
-    // 获取临时下载链接（有效期 1 小时）
-    const { generateTempUrl } = await import('@/lib/oss');
-    const downloadUrl = await generateTempUrl(skill.fileName, 3600);
+    let downloadUrl = '';
+    const isExternalLinkSkill =
+      skill.fileType?.toLowerCase() === 'link' || /^https?:\/\//i.test(skill.fileName);
+
+    if (isExternalLinkSkill) {
+      if (!/^https?:\/\//i.test(skill.fileName)) {
+        return NextResponse.json(
+          errorResponse('外链 Skill 地址无效', 'INVALID_LINK'),
+          { status: 400 }
+        );
+      }
+      downloadUrl = skill.fileName;
+    } else {
+      // 获取临时下载链接（有效期 1 小时）
+      const { generateTempUrl } = await import('@/lib/oss');
+      downloadUrl = await generateTempUrl(skill.fileName, 3600);
+    }
 
     return NextResponse.json(
       successResponse({
         downloadUrl,
         fileName: skill.fileName,
         fileSize: skill.fileSize,
+        sourceMode: isExternalLinkSkill ? 'link' : 'file',
         downloadedBefore,
         downloadCountIncremented: true,
       })

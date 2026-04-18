@@ -28,17 +28,41 @@ export async function POST(request: NextRequest) {
 
     // 解析 FormData
     const formData = await request.formData();
-    const file = formData.get('file') as File;
+    const sourceMode = (formData.get('sourceMode') as string) || 'file';
+    const isLinkMode = sourceMode === 'link';
+    const file = formData.get('file') as File | null;
     const title = formData.get('title') as string;
     const summary = formData.get('summary') as string;
     const description = formData.get('description') as string;
     const categoryId = formData.get('categoryId') as string;
     const tagsInput = formData.get('tags');
+    const externalUrlInput = ((formData.get('externalUrl') as string) || '').trim();
 
     // 验证必填字段
-    if (!file || !title || !summary || !description || !categoryId) {
+    if (!title || !summary || !description || !categoryId) {
       return NextResponse.json(
         errorResponse('缺少必填字段', 'VALIDATION_ERROR'),
+        { status: 400 }
+      );
+    }
+
+    if (isLinkMode) {
+      if (!externalUrlInput) {
+        return NextResponse.json(
+          errorResponse('缺少 Skill 链接', 'VALIDATION_ERROR'),
+          { status: 400 }
+        );
+      }
+
+      if (!isHttpUrl(externalUrlInput)) {
+        return NextResponse.json(
+          errorResponse('Skill 链接格式不正确，仅支持 http/https', 'VALIDATION_ERROR'),
+          { status: 400 }
+        );
+      }
+    } else if (!file) {
+      return NextResponse.json(
+        errorResponse('缺少上传文件', 'VALIDATION_ERROR'),
         { status: 400 }
       );
     }
@@ -49,23 +73,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    // 验证文件
-    const validation = validateFile(file.name, file.size);
-    if (!validation.valid) {
-      return NextResponse.json(
-        errorResponse(validation.error || '文件验证失败', 'FILE_VALIDATION_ERROR'),
-        { status: 400 }
-      );
-    }
-
-    // 读取文件为 Buffer
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // 生成安全的文件名
-    const safeFileName = sanitizeFileName(file.name);
-    const uniqueFileName = `${Date.now()}-${safeFileName}`;
 
     const tags = parseTagsInput(tagsInput);
     await ensureDefaultCategories();
@@ -85,11 +92,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 上传到 OSS
-    const uploadResult = await uploadFile(buffer, uniqueFileName, file.type);
-    const normalizedFileType = file.name.toLowerCase().endsWith('.tar.gz')
-      ? 'tar.gz'
-      : file.name.split('.').pop() || '';
+    let storedFileName = '';
+    let storedFileSize = 0;
+    let storedFileType = '';
+    let fileUrl = '';
+
+    if (isLinkMode) {
+      const normalizedUrl = new URL(externalUrlInput).toString();
+      storedFileName = normalizedUrl;
+      storedFileType = inferFileTypeFromUrl(normalizedUrl);
+      storedFileSize = 0;
+      fileUrl = normalizedUrl;
+    } else {
+      const selectedFile = file as File;
+
+      // 验证文件
+      const validation = validateFile(selectedFile.name, selectedFile.size);
+      if (!validation.valid) {
+        return NextResponse.json(
+          errorResponse(validation.error || '文件验证失败', 'FILE_VALIDATION_ERROR'),
+          { status: 400 }
+        );
+      }
+
+      // 读取文件为 Buffer
+      const arrayBuffer = await selectedFile.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      // 生成安全的文件名
+      const safeFileName = sanitizeFileName(selectedFile.name);
+      const uniqueFileName = `${Date.now()}-${safeFileName}`;
+
+      // 上传到 OSS
+      const uploadResult = await uploadFile(buffer, uniqueFileName, selectedFile.type);
+      storedFileName = uploadResult.fileName;
+      storedFileSize = uploadResult.fileSize;
+      storedFileType = selectedFile.name.toLowerCase().endsWith('.tar.gz')
+        ? 'tar.gz'
+        : selectedFile.name.split('.').pop() || '';
+      fileUrl = uploadResult.url;
+    }
 
     // 创建技能包记录
     const skill = await prisma.skill.create({
@@ -99,9 +141,9 @@ export async function POST(request: NextRequest) {
         description,
         categoryId: category.id,
         tags: toPrismaTagsValue(tags, prisma) as any,
-        fileName: uploadResult.fileName,
-        fileSize: uploadResult.fileSize,
-        fileType: normalizedFileType,
+        fileName: storedFileName,
+        fileSize: storedFileSize,
+        fileType: storedFileType,
         authorId: currentUser.id,
         status: 'active',
       },
@@ -139,8 +181,9 @@ export async function POST(request: NextRequest) {
       skillId: skill.id,
       categoryId: skill.categoryId,
       metadata: {
-        fileType: normalizedFileType,
-        fileSize: uploadResult.fileSize,
+        fileType: storedFileType,
+        fileSize: storedFileSize,
+        sourceMode: isLinkMode ? 'link' : 'file',
       },
     });
 
@@ -148,9 +191,9 @@ export async function POST(request: NextRequest) {
       successResponse(
         {
           skill: normalizedSkill,
-          fileUrl: uploadResult.url,
+          fileUrl,
         },
-        '上传成功'
+        isLinkMode ? '链接发布成功' : '上传成功'
       ),
       { status: 201 }
     );
@@ -161,4 +204,29 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function inferFileTypeFromUrl(value: string): string {
+  try {
+    const parsed = new URL(value);
+    const path = parsed.pathname.toLowerCase();
+    if (path.endsWith('.tar.gz')) return 'tar.gz';
+    const fileName = path.split('/').pop() || '';
+    if (fileName.includes('.')) {
+      const ext = fileName.split('.').pop();
+      if (ext) return ext;
+    }
+  } catch {
+    // noop
+  }
+  return 'link';
 }

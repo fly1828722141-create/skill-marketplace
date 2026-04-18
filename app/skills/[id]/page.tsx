@@ -25,6 +25,9 @@ export default function SkillDetailPage() {
   const [downloading, setDownloading] = useState(false);
 
   const skillId = params.id as string;
+  const isExternalLinkSkill =
+    !!skill &&
+    (skill.fileType?.toLowerCase() === 'link' || /^https?:\/\//i.test(skill.fileName));
 
   // ===========================================
   // 加载技能包详情
@@ -85,8 +88,10 @@ export default function SkillDetailPage() {
       if (result.success) {
         // 打开下载链接
         window.open(result.data.downloadUrl, '_blank');
-        
-        if (!result.data.downloadedBefore) {
+
+        if (isExternalLinkSkill) {
+          message.success('已打开外部 Skill 链接');
+        } else if (!result.data.downloadedBefore) {
           message.success('下载成功，感谢分享！');
         } else {
           message.info('开始下载（已下载过此技能包）');
@@ -144,10 +149,10 @@ export default function SkillDetailPage() {
                 📅 {formatDateTime(skill.createdAt)}
               </span>
               <span className="meta-item">
-                📦 {formatFileSize(skill.fileSize)}
+                {isExternalLinkSkill ? `🔗 外部链接` : `📦 ${formatFileSize(skill.fileSize)}`}
               </span>
               <span className="meta-item">
-                🏷️ {skill.fileType.toUpperCase()}
+                🏷️ {(skill.fileType || 'link').toUpperCase()}
               </span>
               <span className="meta-item">
                 🗂️ {skill.category?.name || '未分类'}
@@ -210,7 +215,11 @@ export default function SkillDetailPage() {
               disabled={downloading}
               className="btn btn-primary btn-download"
             >
-              {downloading ? '⏳ 准备中...' : `📥 下载 (${formatNumber(skill.downloadCount)})`}
+              {downloading
+                ? '⏳ 准备中...'
+                : isExternalLinkSkill
+                ? `🔗 打开链接 (${formatNumber(skill.downloadCount)})`
+                : `📥 下载 (${formatNumber(skill.downloadCount)})`}
             </button>
 
             <div className="stats-grid">

@@ -195,11 +195,19 @@ function SkillsContent() {
             >
               <h3>{skill.title}</h3>
               <p>{skill.description}</p>
-              <div className="skill-meta">
-                <span>📥 {formatNumber(skill.downloadCount)}</span>
-                <span>👁 {formatNumber(skill.viewCount)}</span>
-                <span>💾 {formatFileSize(skill.fileSize)}</span>
-              </div>
+              {(() => {
+                const isExternalLinkSkill =
+                  skill.fileType?.toLowerCase() === 'link' || /^https?:\/\//i.test(skill.fileName);
+                return (
+                  <div className="skill-meta">
+                    <span>📥 {formatNumber(skill.downloadCount)}</span>
+                    <span>👁 {formatNumber(skill.viewCount)}</span>
+                    <span>
+                      {isExternalLinkSkill ? '🔗 外链' : `💾 ${formatFileSize(skill.fileSize)}`}
+                    </span>
+                  </div>
+                );
+              })()}
               <div className="skill-footer">
                 <span className="author">{skill.author?.name || '未知作者'}</span>
                 <span className="time">{formatTime(skill.createdAt)}</span>

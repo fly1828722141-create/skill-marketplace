@@ -178,7 +178,9 @@ export interface CreateSkillFormData {
   categoryId: string;
   description: string;
   tags: string[];
-  file: File;
+  file?: File;
+  externalUrl?: string;
+  sourceMode?: 'file' | 'link';
 }
 
 export interface UpdateSkillFormData {
