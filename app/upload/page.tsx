@@ -6,7 +6,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { message } from 'antd';
 import { useSession } from 'next-auth/react';
@@ -30,6 +30,7 @@ export default function UploadPage() {
     tags: '',
   });
   const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -216,6 +217,11 @@ export default function UploadPage() {
 
       setFile(selectedFile);
     }
+  }
+
+  function triggerFilePicker() {
+    if (loading) return;
+    fileInputRef.current?.click();
   }
 
   const summaryLength = formData.summary.trim().length;
@@ -440,9 +446,11 @@ export default function UploadPage() {
                   <label htmlFor="file">
                     技能包文件 <span className="required">*</span>
                   </label>
-                  <label
-                    htmlFor="file"
+                  <button
+                    type="button"
                     className={`upload-dropzone ${file ? 'is-selected' : ''}`}
+                    onClick={triggerFilePicker}
+                    disabled={loading}
                   >
                     <span className="upload-drop-icon" aria-hidden="true">
                       ⇪
@@ -453,10 +461,11 @@ export default function UploadPage() {
                     <span className="upload-drop-subtitle">
                       支持 .zip / .tar.gz / .rar / .7z
                     </span>
-                  </label>
+                  </button>
                   <input
                     id="file"
                     type="file"
+                    ref={fileInputRef}
                     className="upload-hidden-input"
                     accept=".zip,.tar.gz,.rar,.7z"
                     onChange={handleFileChange}

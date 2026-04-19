@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { message } from 'antd';
 import { useSession } from 'next-auth/react';
@@ -38,6 +38,7 @@ interface ReviewListResponse {
 }
 
 const MAX_REVIEW_IMAGES = 4;
+const REVIEWS_CACHE_PREFIX = 'skill_reviews_cache_v1:';
 
 export default function SkillReviews({
   skillId,
@@ -55,16 +56,30 @@ export default function SkillReviews({
   const [content, setContent] = useState('');
   const [rating, setRating] = useState('5');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const fetchSeqRef = useRef(0);
+  const cacheKey = `${REVIEWS_CACHE_PREFIX}${skillId}`;
 
   const canSubmit = useMemo(() => {
     return content.trim().length > 0 || imageFiles.length > 0;
   }, [content, imageFiles]);
 
-  async function fetchReviews() {
+  async function fetchReviews(options?: { silent?: boolean }) {
+    const silent = Boolean(options?.silent);
+    const seq = fetchSeqRef.current + 1;
+    fetchSeqRef.current = seq;
+
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
+
       const response = await fetch(`/api/skills/${skillId}/reviews?page=1&pageSize=50`, {
         cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        },
       });
       const result = await response.json();
 
@@ -72,22 +87,64 @@ export default function SkillReviews({
         throw new Error(result.error || '加载评价失败');
       }
 
+      if (seq !== fetchSeqRef.current) {
+        return;
+      }
+
       const data = result.data as ReviewListResponse;
       setReviews(data.items || []);
       setTotal(data.total || 0);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(
+          cacheKey,
+          JSON.stringify({ items: data.items || [], total: data.total || 0 })
+        );
+      }
     } catch (error: any) {
       console.error('加载评价失败:', error);
-      message.error(error.message || '加载评价失败');
+      if (!silent) {
+        message.error(error.message || '加载评价失败');
+      }
     } finally {
-      setLoading(false);
+      if (!silent && seq === fetchSeqRef.current) {
+        setLoading(false);
+      }
     }
   }
 
   useEffect(() => {
-    fetchReviews();
-    const timer = setInterval(fetchReviews, 20000);
-    return () => clearInterval(timer);
-  }, [skillId]);
+    let mounted = true;
+    let hasCache = false;
+
+    if (typeof window !== 'undefined') {
+      const cachedRaw = window.localStorage.getItem(cacheKey);
+      if (cachedRaw) {
+        try {
+          const cached = JSON.parse(cachedRaw) as {
+            items?: Review[];
+            total?: number;
+          };
+          if (mounted && Array.isArray(cached.items)) {
+            setReviews(cached.items);
+            setTotal(Number(cached.total || cached.items.length || 0));
+            setLoading(false);
+            hasCache = true;
+          }
+        } catch (error) {
+          console.error('读取评价缓存失败:', error);
+        }
+      }
+    }
+
+    void fetchReviews({ silent: hasCache });
+    const timer = setInterval(() => {
+      void fetchReviews({ silent: true });
+    }, 20000);
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
+  }, [skillId, cacheKey]);
 
   function handleImageChange(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files || []);
@@ -100,6 +157,10 @@ export default function SkillReviews({
 
   function removeImage(index: number) {
     setImageFiles((prev) => prev.filter((_, fileIndex) => fileIndex !== index));
+  }
+
+  function triggerImagePicker() {
+    imageInputRef.current?.click();
   }
 
   async function handleSubmitReview(event: React.FormEvent) {
@@ -140,7 +201,7 @@ export default function SkillReviews({
       setContent('');
       setRating('5');
       setImageFiles([]);
-      await fetchReviews();
+      await fetchReviews({ silent: true });
     } catch (error: any) {
       console.error('提交评价失败:', error);
       message.error(error.message || '提交评价失败');
@@ -228,16 +289,22 @@ export default function SkillReviews({
             </select>
           </label>
 
-          <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ cursor: 'pointer' }}
+            onClick={triggerImagePicker}
+          >
             添加图片
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              style={{ display: 'none' }}
-              onChange={handleImageChange}
-            />
-          </label>
+          </button>
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            style={{ display: 'none' }}
+            onChange={handleImageChange}
+          />
 
           <button
             type="submit"
