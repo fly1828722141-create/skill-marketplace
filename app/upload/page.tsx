@@ -13,11 +13,13 @@ import { useSession } from 'next-auth/react';
 import { SkillCategory } from '@/types';
 import { getFallbackSkillCategories } from '@/lib/category-presets';
 
+type StorageMode = 'oss' | 'r2' | 'database';
+
 export default function UploadPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [loading, setLoading] = useState(false);
-  const [ossConfigured, setOssConfigured] = useState<boolean | null>(null);
+  const [storageMode, setStorageMode] = useState<StorageMode>('database');
   const [sourceMode, setSourceMode] = useState<'link' | 'file'>('link');
   const [externalUrl, setExternalUrl] = useState('');
   const [categories, setCategories] = useState<SkillCategory[]>([]);
@@ -94,11 +96,20 @@ export default function UploadPage() {
         const response = await fetch('/api/upload/config');
         const result = await response.json();
         if (!mounted) return;
-        setOssConfigured(Boolean(result?.success && result?.data?.ossConfigured));
+        const mode = (result?.data?.storageMode || result?.data?.fileUploadMode) as
+          | StorageMode
+          | undefined;
+        if (mode === 'oss' || mode === 'r2' || mode === 'database') {
+          setStorageMode(mode);
+        } else if (result?.success && result?.data?.ossConfigured) {
+          setStorageMode('oss');
+        } else {
+          setStorageMode('database');
+        }
       } catch (error) {
-        console.warn('上传配置检查失败，默认按已配置处理:', error);
+        console.warn('上传配置检查失败，默认按内置存储处理:', error);
         if (mounted) {
-          setOssConfigured(true);
+          setStorageMode('database');
         }
       }
     }
@@ -228,6 +239,12 @@ export default function UploadPage() {
   const selectedCategoryName =
     categories.find((item) => item.id === formData.categoryId)?.name || '未选择';
   const isFileMode = sourceMode === 'file';
+  const storageLabel =
+    storageMode === 'r2'
+      ? 'Cloudflare R2 存储'
+      : storageMode === 'oss'
+      ? '阿里云 OSS 存储'
+      : '内置存储';
   const normalizedExternalUrl = normalizeExternalLinkInput(externalUrl);
   const submitBlockedReason =
     !formData.title.trim()
@@ -418,9 +435,9 @@ export default function UploadPage() {
                 </button>
               </div>
 
-              {sourceMode === 'file' && ossConfigured === false ? (
+              {sourceMode === 'file' && storageMode === 'database' ? (
                 <div className="upload-config-banner upload-config-banner-info" role="status">
-                  当前未配置 OSS，系统将自动使用内置存储完成文件上传。
+                  当前未配置云对象存储（OSS/R2），系统将自动使用内置存储完成文件上传。
                 </div>
               ) : null}
 
@@ -523,7 +540,7 @@ export default function UploadPage() {
               {sourceMode === 'file' ? (
                 <div className="upload-panel-stat">
                   <span>文件存储</span>
-                  <strong>{ossConfigured === false ? '内置存储' : 'OSS 存储'}</strong>
+                  <strong>{storageLabel}</strong>
                 </div>
               ) : null}
               {sourceMode === 'link' ? (

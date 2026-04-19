@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { isOSSConfigured, uploadFile, validateFile } from '@/lib/oss';
+import { getFileStorageMode, uploadFile, validateFile } from '@/lib/oss';
 import prisma from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { ensureDefaultCategories } from '@/lib/skill-categories';
@@ -104,7 +104,8 @@ export async function POST(request: NextRequest) {
           mimeType: string | null;
         }
       | null = null;
-    const useOssStorage = !isLinkMode && isOSSConfigured();
+    const activeStorageMode = isLinkMode ? 'database' : getFileStorageMode();
+    const useObjectStorage = !isLinkMode && activeStorageMode !== 'database';
 
     if (isLinkMode) {
       const normalizedUrl = new URL(externalUrlInput).toString();
@@ -136,14 +137,14 @@ export async function POST(request: NextRequest) {
         ? 'tar.gz'
         : selectedFile.name.split('.').pop() || '';
 
-      if (useOssStorage) {
-        // 优先上传到 OSS
+      if (useObjectStorage) {
+        // 优先上传到对象存储（OSS/R2）
         const uploadResult = await uploadFile(buffer, uniqueFileName, selectedFile.type);
         storedFileName = uploadResult.fileName;
         storedFileSize = uploadResult.fileSize;
         fileUrl = uploadResult.url;
       } else {
-        // OSS 未配置时，兜底存入数据库
+        // 对象存储未配置时，兜底存入数据库
         storedFileName = selectedFile.name;
         storedFileSize = selectedFile.size;
         localFileBlob = {
@@ -235,7 +236,7 @@ export async function POST(request: NextRequest) {
         fileType: storedFileType,
         fileSize: storedFileSize,
         sourceMode: isLinkMode ? 'link' : 'file',
-        storageMode: isLinkMode ? 'link' : useOssStorage ? 'oss' : 'database',
+        storageMode: isLinkMode ? 'link' : activeStorageMode,
       },
     });
 

@@ -145,7 +145,7 @@ export async function POST(
     const rawRating = formData.get('rating');
     const rating = getValidRating(rawRating);
     const imageFiles = getImageFiles(formData);
-    const useOssStorage = isOSSConfigured();
+    const useObjectStorage = isOSSConfigured();
 
     if (rawRating !== null && rawRating !== '' && rating === null) {
       return NextResponse.json(
@@ -197,7 +197,7 @@ export async function POST(
         const uniqueName = `review-${Date.now()}-${index + 1}-${safeName}`;
         const buffer = Buffer.from(await image.arrayBuffer());
 
-        if (!useOssStorage) {
+        if (!useObjectStorage) {
           const mimeType = image.type || 'image/png';
           const dataUrl = `data:${mimeType};base64,${buffer.toString('base64')}`;
 
