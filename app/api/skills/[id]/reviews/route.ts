@@ -146,7 +146,6 @@ export async function POST(
     const rating = getValidRating(rawRating);
     const imageFiles = getImageFiles(formData);
     const useOssStorage = isOSSConfigured();
-    const maxImageSize = useOssStorage ? MAX_IMAGE_SIZE : 2 * 1024 * 1024;
 
     if (rawRating !== null && rawRating !== '' && rating === null) {
       return NextResponse.json(
@@ -184,12 +183,9 @@ export async function POST(
         );
       }
 
-      if (image.size > maxImageSize) {
+      if (image.size > MAX_IMAGE_SIZE) {
         return NextResponse.json(
-          errorResponse(
-            `单张图片不能超过 ${Math.floor(maxImageSize / 1024 / 1024)}MB`,
-            'VALIDATION_ERROR'
-          ),
+          errorResponse('单张图片不能超过 5MB', 'VALIDATION_ERROR'),
           { status: 400 }
         );
       }
