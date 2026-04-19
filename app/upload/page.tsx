@@ -1,23 +1,32 @@
 /**
  * 上传页面
  *
- * 纯链接发布模式：用户提交 Skill 外链，不再上传压缩包文件
+ * 支持：
+ * 1) 链接发布
+ * 2) 压缩包发布到 GitHub（生成安装命令）
  */
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { message } from 'antd';
 import { useSession } from 'next-auth/react';
 import { SkillCategory } from '@/types';
 import { getFallbackSkillCategories } from '@/lib/category-presets';
 
+type UploadSourceMode = 'link' | 'github-package';
+
 export default function UploadPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [loading, setLoading] = useState(false);
+  const [sourceMode, setSourceMode] = useState<UploadSourceMode>('link');
   const [externalUrl, setExternalUrl] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [githubPackageUploadEnabled, setGithubPackageUploadEnabled] = useState(false);
+
   const [categories, setCategories] = useState<SkillCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [formData, setFormData] = useState({
@@ -75,12 +84,52 @@ export default function UploadPage() {
       }
     }
 
-    fetchCategories();
+    async function fetchUploadConfig() {
+      try {
+        const response = await fetch('/api/upload/config');
+        const result = await response.json();
+        if (!mounted) return;
+
+        const enabled = Boolean(result?.data?.githubPackageUploadEnabled);
+        setGithubPackageUploadEnabled(enabled);
+        if (!enabled) {
+          setSourceMode('link');
+        }
+      } catch (error) {
+        console.warn('读取上传配置失败:', error);
+        if (mounted) {
+          setGithubPackageUploadEnabled(false);
+          setSourceMode('link');
+        }
+      }
+    }
+
+    void fetchCategories();
+    void fetchUploadConfig();
 
     return () => {
       mounted = false;
     };
   }, []);
+
+  function triggerFilePicker() {
+    if (loading) return;
+    fileInputRef.current?.click();
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) return;
+
+    const validation = validatePackageFile(selectedFile);
+    if (!validation.valid) {
+      message.error(validation.error || '文件验证失败');
+      e.target.value = '';
+      return;
+    }
+
+    setFile(selectedFile);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -102,27 +151,45 @@ export default function UploadPage() {
     }
 
     const normalizedExternalUrl = normalizeExternalLinkInput(externalUrl);
-    if (!normalizedExternalUrl) {
-      message.error('请粘贴可访问的 Skill 链接');
-      return;
+    if (sourceMode === 'link') {
+      if (!normalizedExternalUrl) {
+        message.error('请粘贴可访问的 Skill 链接');
+        return;
+      }
+
+      if (!isHttpUrl(normalizedExternalUrl)) {
+        message.error('链接格式不正确，仅支持 http/https 链接');
+        return;
+      }
     }
 
-    if (!isHttpUrl(normalizedExternalUrl)) {
-      message.error('链接格式不正确，仅支持 http/https 链接');
-      return;
+    if (sourceMode === 'github-package') {
+      if (!githubPackageUploadEnabled) {
+        message.error('当前未开启 GitHub 压缩包发布，请联系管理员配置');
+        return;
+      }
+      if (!file) {
+        message.error('请先选择压缩包文件');
+        return;
+      }
     }
 
     setLoading(true);
 
     try {
       const uploadData = new FormData();
-      uploadData.append('sourceMode', 'link');
+      uploadData.append('sourceMode', sourceMode);
       uploadData.append('title', formData.title);
       uploadData.append('summary', formData.summary);
       uploadData.append('categoryId', formData.categoryId);
       uploadData.append('description', formData.description);
       uploadData.append('tags', formData.tags);
-      uploadData.append('externalUrl', normalizedExternalUrl);
+
+      if (sourceMode === 'link') {
+        uploadData.append('externalUrl', normalizedExternalUrl);
+      } else if (file) {
+        uploadData.append('file', file);
+      }
 
       const response = await fetch('/api/upload', {
         method: 'POST',
@@ -132,7 +199,11 @@ export default function UploadPage() {
       const result = await response.json().catch(() => null);
 
       if (response.ok && result?.success) {
-        message.success('链接发布成功！');
+        if (sourceMode === 'github-package') {
+          message.success('已上传到 GitHub，详情页可一键复制安装命令');
+        } else {
+          message.success('链接发布成功！');
+        }
         router.push(`/skills/${result.data.skill.id}`);
       } else {
         message.error(result?.error || '发布失败，请稍后重试');
@@ -149,6 +220,7 @@ export default function UploadPage() {
   const selectedCategoryName =
     categories.find((item) => item.id === formData.categoryId)?.name || '未选择';
   const normalizedExternalUrl = normalizeExternalLinkInput(externalUrl);
+
   const submitBlockedReason =
     !formData.title.trim()
       ? '请先填写标题'
@@ -160,10 +232,14 @@ export default function UploadPage() {
       ? '请先选择 Skill 类型'
       : !formData.description.trim()
       ? '请先填写描述'
-      : !normalizedExternalUrl
+      : sourceMode === 'link' && !normalizedExternalUrl
       ? '请先粘贴 Skill 链接'
-      : !isHttpUrl(normalizedExternalUrl)
+      : sourceMode === 'link' && !isHttpUrl(normalizedExternalUrl)
       ? '链接格式不正确，仅支持 http/https'
+      : sourceMode === 'github-package' && !githubPackageUploadEnabled
+      ? '当前未开启 GitHub 压缩包发布'
+      : sourceMode === 'github-package' && !file
+      ? '请先选择压缩包（.zip/.tar.gz/.rar/.7z）'
       : null;
 
   if (status === 'loading') {
@@ -184,7 +260,7 @@ export default function UploadPage() {
         <section className="content-section">
           <div className="upload-guard-card">
             <h2>登录后可上传 Skill</h2>
-            <p>请先使用 Google 账号登录，再提交 Skill 内容与链接。</p>
+            <p>请先使用 Google 账号登录，再提交 Skill 内容。</p>
             <button
               type="button"
               className="btn btn-primary upload-submit-btn"
@@ -205,7 +281,7 @@ export default function UploadPage() {
         <h1 className="hero-title">
           发布你的 <span>Skill</span>
         </h1>
-        <p className="hero-subtitle">把你的实战方案整理成可复制链接，让更多同学一键复用。</p>
+        <p className="hero-subtitle">支持直接发布链接，或上传压缩包自动同步到 GitHub 并生成安装命令。</p>
       </section>
 
       <section className="content-section">
@@ -312,36 +388,102 @@ export default function UploadPage() {
             <div className="upload-section">
               <div className="upload-section-head">
                 <h2>发布方式</h2>
-                <p>当前为纯链接发布模式，无需上传文件与对象存储配置。</p>
+                <p>链接模式更快；压缩包模式会自动推送到 GitHub 并生成安装命令。</p>
               </div>
 
-              <div className="upload-mode-switch" role="status" aria-label="发布方式">
+              <div className="upload-mode-switch" role="tablist" aria-label="发布方式">
                 <button
                   type="button"
-                  className="upload-mode-option active"
-                  disabled
-                  aria-selected
+                  className={`upload-mode-option ${sourceMode === 'link' ? 'active' : ''}`}
+                  onClick={() => setSourceMode('link')}
+                  aria-selected={sourceMode === 'link'}
                 >
-                  🔗 链接发布（已启用）
+                  🔗 链接发布
+                </button>
+                <button
+                  type="button"
+                  className={`upload-mode-option ${sourceMode === 'github-package' ? 'active' : ''}`}
+                  onClick={() => {
+                    if (!githubPackageUploadEnabled) return;
+                    setSourceMode('github-package');
+                  }}
+                  aria-selected={sourceMode === 'github-package'}
+                  disabled={!githubPackageUploadEnabled}
+                  title={
+                    githubPackageUploadEnabled
+                      ? '上传压缩包并自动发布到 GitHub'
+                      : '管理员尚未配置 GitHub 发布参数'
+                  }
+                >
+                  📦 GitHub 压缩包发布
                 </button>
               </div>
 
-              <div className="form-group">
-                <label htmlFor="externalUrl">
-                  Skill 链接 <span className="required">*</span>
-                </label>
-                <input
-                  id="externalUrl"
-                  type="text"
-                  className="input"
-                  placeholder="例如：https://skills.sh/sickn33/antigravity-awesome-skills/data-scientist"
-                  value={externalUrl}
-                  onChange={(e) => setExternalUrl(e.target.value)}
-                />
-                <p className="help-text">
-                  可直接粘贴 URL，或粘贴包含 URL 的命令文本，系统会自动提取链接。
-                </p>
-              </div>
+              {sourceMode === 'github-package' && !githubPackageUploadEnabled ? (
+                <div className="upload-config-banner" role="status">
+                  GitHub 压缩包发布暂未配置，请联系管理员设置 GITHUB_TOKEN / GITHUB_SKILL_OWNER / GITHUB_SKILL_REPO。
+                </div>
+              ) : null}
+
+              {sourceMode === 'github-package' && githubPackageUploadEnabled ? (
+                <div className="upload-config-banner upload-config-banner-info" role="status">
+                  压缩包将自动发布到 GitHub，并在详情页生成可复制安装命令。
+                </div>
+              ) : null}
+
+              {sourceMode === 'link' ? (
+                <div className="form-group">
+                  <label htmlFor="externalUrl">
+                    Skill 链接 <span className="required">*</span>
+                  </label>
+                  <input
+                    id="externalUrl"
+                    type="text"
+                    className="input"
+                    placeholder="例如：https://skills.sh/sickn33/antigravity-awesome-skills/data-scientist"
+                    value={externalUrl}
+                    onChange={(e) => setExternalUrl(e.target.value)}
+                  />
+                  <p className="help-text">
+                    可直接粘贴 URL，或粘贴包含 URL 的命令文本，系统会自动提取链接。
+                  </p>
+                </div>
+              ) : (
+                <div className="form-group">
+                  <label htmlFor="skillArchiveFile">
+                    Skill 压缩包 <span className="required">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    className={`upload-dropzone ${file ? 'is-selected' : ''}`}
+                    onClick={triggerFilePicker}
+                    disabled={loading || !githubPackageUploadEnabled}
+                  >
+                    <span className="upload-drop-icon" aria-hidden="true">
+                      ⇪
+                    </span>
+                    <span className="upload-drop-title">
+                      {file ? '文件已就绪，点击可重新选择' : '点击选择 Skill 压缩包'}
+                    </span>
+                    <span className="upload-drop-subtitle">支持 .zip / .tar.gz / .rar / .7z，最大 50MB</span>
+                  </button>
+                  <input
+                    id="skillArchiveFile"
+                    type="file"
+                    ref={fileInputRef}
+                    className="upload-hidden-input"
+                    accept=".zip,.tar.gz,.rar,.7z"
+                    onChange={handleFileChange}
+                    disabled={loading || !githubPackageUploadEnabled}
+                  />
+                  {file && (
+                    <div className="upload-file-chip">
+                      <span className="upload-file-name">{file.name}</span>
+                      <span className="upload-file-size">{formatFileSize(file.size)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="form-actions upload-form-actions">
                 <button
@@ -349,7 +491,13 @@ export default function UploadPage() {
                   className="btn btn-primary upload-submit-btn"
                   disabled={loading || Boolean(submitBlockedReason)}
                 >
-                  {loading ? '发布中...' : '确认发布链接'}
+                  {loading
+                    ? sourceMode === 'github-package'
+                      ? '发布中...'
+                      : '发布中...'
+                    : sourceMode === 'github-package'
+                    ? '上传并发布到 GitHub'
+                    : '确认发布链接'}
                 </button>
                 <button
                   type="button"
@@ -369,16 +517,23 @@ export default function UploadPage() {
               <h3>发布预览</h3>
               <div className="upload-panel-stat">
                 <span>发布方式</span>
-                <strong>链接发布</strong>
+                <strong>{sourceMode === 'link' ? '链接发布' : 'GitHub 压缩包发布'}</strong>
               </div>
               <div className="upload-panel-stat">
                 <span>当前分类</span>
                 <strong>{selectedCategoryName}</strong>
               </div>
-              <div className="upload-panel-stat">
-                <span>链接域名</span>
-                <strong>{extractHost(externalUrl) || '未填写'}</strong>
-              </div>
+              {sourceMode === 'link' ? (
+                <div className="upload-panel-stat">
+                  <span>链接域名</span>
+                  <strong>{extractHost(externalUrl) || '未填写'}</strong>
+                </div>
+              ) : (
+                <div className="upload-panel-stat">
+                  <span>压缩包</span>
+                  <strong>{file ? file.name : '未选择'}</strong>
+                </div>
+              )}
               <div className="upload-panel-stat">
                 <span>简介字数</span>
                 <strong>{summaryLength}</strong>
@@ -400,7 +555,7 @@ export default function UploadPage() {
                 <li>标题建议 8-24 字，突出可解决的问题。</li>
                 <li>简介写清“适用人群 + 产出结果”。</li>
                 <li>描述补充使用步骤，复制后更容易上手。</li>
-                <li>优先使用长期可访问链接，避免失效。</li>
+                <li>若用压缩包模式，系统会自动生成 GitHub 安装命令。</li>
               </ul>
             </div>
           </aside>
@@ -436,4 +591,34 @@ function normalizeExternalLinkInput(input: string): string {
   if (!urlMatch) return '';
 
   return urlMatch[0].replace(/[),.;!?]+$/g, '');
+}
+
+function validatePackageFile(file: File): { valid: boolean; error?: string } {
+  const lowerName = file.name.toLowerCase();
+  const allowedExt = ['.zip', '.tar.gz', '.rar', '.7z'];
+  if (!allowedExt.some((ext) => lowerName.endsWith(ext))) {
+    return {
+      valid: false,
+      error: '不支持的文件类型，仅支持 .zip / .tar.gz / .rar / .7z',
+    };
+  }
+
+  const maxSize = 50 * 1024 * 1024;
+  if (file.size > maxSize) {
+    return {
+      valid: false,
+      error: '文件大小不能超过 50MB',
+    };
+  }
+
+  return { valid: true };
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const base = 1024;
+  const idx = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(base)));
+  const value = bytes / Math.pow(base, idx);
+  return `${value.toFixed(value >= 100 || idx === 0 ? 0 : 2)} ${units[idx]}`;
 }

@@ -1,7 +1,9 @@
 /**
  * Skill 发布 API
  *
- * 纯链接发布模式：仅接受 Skill 外链，不再上传压缩包文件
+ * 支持：
+ * 1) 链接发布（link）
+ * 2) 压缩包发布到 GitHub（github-package）
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -11,9 +13,16 @@ import { ensureDefaultCategories } from '@/lib/skill-categories';
 import { recordEvent } from '@/lib/event-log';
 import { successResponse, errorResponse } from '@/lib/utils';
 import { normalizeTagsFromDb, parseTagsInput, toPrismaTagsValue } from '@/lib/tags';
+import {
+  isGitHubSkillPublishConfigured,
+  publishSkillPackageToGitHub,
+} from '@/lib/github-skill-publish';
+import { validateFile } from '@/lib/oss';
+
+type UploadSourceMode = 'link' | 'github-package';
 
 // ===========================================
-// POST /api/upload - 发布 Skill 链接
+// POST /api/upload - 发布 Skill
 // ===========================================
 export async function POST(request: NextRequest) {
   try {
@@ -26,39 +35,23 @@ export async function POST(request: NextRequest) {
     }
 
     const formData = await request.formData();
-    const sourceMode = String(formData.get('sourceMode') || '').toLowerCase();
+    const sourceMode = parseSourceMode(String(formData.get('sourceMode') || ''));
     const title = formData.get('title') as string;
     const summary = formData.get('summary') as string;
     const description = formData.get('description') as string;
     const categoryId = formData.get('categoryId') as string;
     const tagsInput = formData.get('tags');
+
+    // link 模式字段
     const externalUrlRaw = ((formData.get('externalUrl') as string) || '').trim();
     const externalUrlInput = normalizeExternalLinkInput(externalUrlRaw);
 
-    if (sourceMode === 'file') {
-      return NextResponse.json(
-        errorResponse('当前站点已切换为纯链接发布，不再支持文件上传', 'FILE_UPLOAD_DISABLED'),
-        { status: 400 }
-      );
-    }
+    // github-package 模式字段
+    const packageFile = formData.get('file') as File | null;
 
     if (!title || !summary || !description || !categoryId) {
       return NextResponse.json(
         errorResponse('缺少必填字段', 'VALIDATION_ERROR'),
-        { status: 400 }
-      );
-    }
-
-    if (!externalUrlInput) {
-      return NextResponse.json(
-        errorResponse('缺少 Skill 链接', 'VALIDATION_ERROR'),
-        { status: 400 }
-      );
-    }
-
-    if (!isHttpUrl(externalUrlInput)) {
-      return NextResponse.json(
-        errorResponse('Skill 链接格式不正确，仅支持 http/https', 'VALIDATION_ERROR'),
         { status: 400 }
       );
     }
@@ -88,8 +81,84 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const normalizedUrl = new URL(externalUrlInput).toString();
-    const fileType = inferFileTypeFromUrl(normalizedUrl);
+    let fileName = '';
+    let fileSize = 0;
+    let fileType = 'link';
+    let fileUrl = '';
+    let installCommand = '';
+    let githubPackageUrl = '';
+    let githubSkillSlug = '';
+
+    if (sourceMode === 'link') {
+      if (!externalUrlInput) {
+        return NextResponse.json(
+          errorResponse('缺少 Skill 链接', 'VALIDATION_ERROR'),
+          { status: 400 }
+        );
+      }
+
+      if (!isHttpUrl(externalUrlInput)) {
+        return NextResponse.json(
+          errorResponse('Skill 链接格式不正确，仅支持 http/https', 'VALIDATION_ERROR'),
+          { status: 400 }
+        );
+      }
+
+      const normalizedUrl = new URL(externalUrlInput).toString();
+      fileName = normalizedUrl;
+      fileSize = 0;
+      fileType = inferFileTypeFromUrl(normalizedUrl);
+      fileUrl = normalizedUrl;
+    } else {
+      if (!isGitHubSkillPublishConfigured()) {
+        return NextResponse.json(
+          errorResponse(
+            'GitHub 压缩包发布未配置，请联系管理员设置 GITHUB_TOKEN / GITHUB_SKILL_OWNER / GITHUB_SKILL_REPO',
+            'GITHUB_PUBLISH_NOT_CONFIGURED'
+          ),
+          { status: 503 }
+        );
+      }
+
+      if (!packageFile) {
+        return NextResponse.json(
+          errorResponse('请先选择压缩包文件', 'VALIDATION_ERROR'),
+          { status: 400 }
+        );
+      }
+
+      const validation = validateFile(packageFile.name, packageFile.size);
+      if (!validation.valid) {
+        return NextResponse.json(
+          errorResponse(validation.error || '文件验证失败', 'FILE_VALIDATION_ERROR'),
+          { status: 400 }
+        );
+      }
+
+      const packageBuffer = Buffer.from(await packageFile.arrayBuffer());
+      const githubResult = await publishSkillPackageToGitHub({
+        fileBuffer: packageBuffer,
+        originalFileName: packageFile.name,
+        title,
+        summary,
+        description,
+        tags,
+        uploader: {
+          id: currentUser.id,
+          name: currentUser.name,
+          email: currentUser.email,
+        },
+      });
+
+      // 对外统一走“链接技能”展示：详情页可直接展示 GitHub 链接与安装命令
+      fileName = githubResult.sourceUrl;
+      fileSize = packageFile.size;
+      fileType = inferFileTypeFromFileName(packageFile.name);
+      fileUrl = githubResult.sourceUrl;
+      installCommand = githubResult.installCommand;
+      githubPackageUrl = githubResult.packageUrl;
+      githubSkillSlug = githubResult.skillSlug;
+    }
 
     const createdSkill = await prisma.skill.create({
       data: {
@@ -98,8 +167,8 @@ export async function POST(request: NextRequest) {
         description,
         categoryId: category.id,
         tags: toPrismaTagsValue(tags, prisma) as any,
-        fileName: normalizedUrl,
-        fileSize: 0,
+        fileName,
+        fileSize,
         fileType,
         authorId: currentUser.id,
         status: 'active',
@@ -150,9 +219,10 @@ export async function POST(request: NextRequest) {
       categoryId: skill.categoryId,
       metadata: {
         fileType,
-        fileSize: 0,
-        sourceMode: 'link',
-        storageMode: 'link',
+        fileSize,
+        sourceMode,
+        storageMode: sourceMode === 'github-package' ? 'github' : 'link',
+        githubSkillSlug: githubSkillSlug || undefined,
       },
     });
 
@@ -160,19 +230,26 @@ export async function POST(request: NextRequest) {
       successResponse(
         {
           skill: normalizedSkill,
-          fileUrl: normalizedUrl,
+          fileUrl,
+          installCommand: installCommand || undefined,
+          packageUrl: githubPackageUrl || undefined,
+          sourceMode,
         },
-        '链接发布成功'
+        sourceMode === 'github-package' ? '已发布到 GitHub，安装命令已生成' : '链接发布成功'
       ),
       { status: 201 }
     );
   } catch (error: any) {
-    console.error('Skill 链接发布失败:', error);
+    console.error('Skill 发布失败:', error);
     return NextResponse.json(
       errorResponse(`发布失败：${error.message}`, 'UPLOAD_ERROR'),
       { status: 500 }
     );
   }
+}
+
+function parseSourceMode(input: string): UploadSourceMode {
+  return input === 'github-package' || input === 'file' ? 'github-package' : 'link';
 }
 
 function isHttpUrl(value: string): boolean {
@@ -182,6 +259,14 @@ function isHttpUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function inferFileTypeFromFileName(fileName: string): string {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith('.tar.gz')) return 'tar.gz';
+  const dot = lower.lastIndexOf('.');
+  if (dot < 0 || dot === lower.length - 1) return 'zip';
+  return lower.slice(dot + 1);
 }
 
 function inferFileTypeFromUrl(value: string): string {

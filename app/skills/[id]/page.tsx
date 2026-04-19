@@ -1159,14 +1159,53 @@ function buildInstallCommand(sourceUrl: string, title: string): string {
     return sourceUrl;
   }
 
-  const repoUrl = sourceUrl.replace(/\/+$/, '');
-  const preferredSlugMatch = title.toLowerCase().match(/[a-z0-9]+(?:-[a-z0-9]+)+/);
-  const simpleSlug = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  const skillSlug = preferredSlugMatch?.[0] || simpleSlug || 'skill-name';
-  return `npx skills add ${repoUrl} --skill ${skillSlug}`;
+  try {
+    const parsed = new URL(sourceUrl);
+    const host = parsed.hostname.toLowerCase();
+    if (host !== 'github.com' && host !== 'www.github.com') {
+      return sourceUrl;
+    }
+
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    if (parts.length < 2) {
+      return sourceUrl;
+    }
+
+    const owner = parts[0];
+    const repo = parts[1].replace(/\.git$/, '');
+    const repoUrl = `https://github.com/${owner}/${repo}`;
+
+    let derivedSlug = '';
+    const treeOrBlobIndex = parts.findIndex((part) => part === 'tree' || part === 'blob');
+
+    if (treeOrBlobIndex >= 0 && parts.length > treeOrBlobIndex + 3) {
+      // owner/repo/tree/<branch>/... 或 owner/repo/blob/<branch>/...
+      const repoPathParts = parts.slice(treeOrBlobIndex + 3);
+      const skillsIndex = repoPathParts.indexOf('skills');
+
+      if (skillsIndex >= 0 && repoPathParts.length > skillsIndex + 1) {
+        derivedSlug = repoPathParts[skillsIndex + 1];
+      } else if (repoPathParts.length > 0) {
+        derivedSlug = repoPathParts[repoPathParts.length - 1];
+      }
+    }
+
+    const preferredSlugMatch = title.toLowerCase().match(/[a-z0-9]+(?:-[a-z0-9]+)+/);
+    const simpleSlug = title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    const normalizedDerivedSlug = derivedSlug
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    const skillSlug = normalizedDerivedSlug || preferredSlugMatch?.[0] || simpleSlug || 'skill-name';
+    return `npx skills add ${repoUrl} --skill ${skillSlug}`;
+  } catch {
+    return sourceUrl;
+  }
 }
 
 function CopyIcon() {

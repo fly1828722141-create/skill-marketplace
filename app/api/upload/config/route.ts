@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getFileStorageMode, isOSSConfigured } from '@/lib/oss';
+import { isGitHubSkillPublishConfigured } from '@/lib/github-skill-publish';
 
 // 上传前配置检查（不暴露密钥）
 export async function GET() {
   const storageMode = getFileStorageMode();
   const objectStorageConfigured = storageMode !== 'database';
+  const githubPackageUploadEnabled = isGitHubSkillPublishConfigured();
 
   return NextResponse.json({
     success: true,
@@ -15,6 +17,7 @@ export async function GET() {
       objectStorageConfigured,
       fileUploadMode: storageMode,
       fileUploadEnabled: true,
+      githubPackageUploadEnabled,
     },
   });
 }

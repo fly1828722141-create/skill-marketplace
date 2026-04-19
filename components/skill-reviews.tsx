@@ -38,6 +38,7 @@ interface ReviewListResponse {
 }
 
 const MAX_REVIEW_IMAGES = 4;
+const MAX_REVIEW_IMAGE_SIZE = 5 * 1024 * 1024;
 const REVIEWS_CACHE_PREFIX = 'skill_reviews_cache_v1:';
 
 export default function SkillReviews({
@@ -56,9 +57,9 @@ export default function SkillReviews({
   const [content, setContent] = useState('');
   const [rating, setRating] = useState('5');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const fetchSeqRef = useRef(0);
   const cacheKey = `${REVIEWS_CACHE_PREFIX}${skillId}`;
+  const reviewImageInputId = `review-images-${skillId}`;
 
   const canSubmit = useMemo(() => {
     return content.trim().length > 0 || imageFiles.length > 0;
@@ -150,17 +151,35 @@ export default function SkillReviews({
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
-    const merged = [...imageFiles, ...files].slice(0, MAX_REVIEW_IMAGES);
-    setImageFiles(merged);
+    const acceptedFiles: File[] = [];
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) {
+        message.warning(`文件 ${file.name} 不是图片格式，已忽略`);
+        continue;
+      }
+      if (file.size > MAX_REVIEW_IMAGE_SIZE) {
+        message.warning(`文件 ${file.name} 超过 5MB，已忽略`);
+        continue;
+      }
+      acceptedFiles.push(file);
+    }
+
+    if (acceptedFiles.length === 0) {
+      event.target.value = '';
+      return;
+    }
+
+    const merged = [...imageFiles, ...acceptedFiles];
+    if (merged.length > MAX_REVIEW_IMAGES) {
+      message.warning(`单条评价最多上传 ${MAX_REVIEW_IMAGES} 张图片`);
+    }
+
+    setImageFiles(merged.slice(0, MAX_REVIEW_IMAGES));
     event.target.value = '';
   }
 
   function removeImage(index: number) {
     setImageFiles((prev) => prev.filter((_, fileIndex) => fileIndex !== index));
-  }
-
-  function triggerImagePicker() {
-    imageInputRef.current?.click();
   }
 
   async function handleSubmitReview(event: React.FormEvent) {
@@ -289,20 +308,15 @@ export default function SkillReviews({
             </select>
           </label>
 
-          <button
-            type="button"
-            className="btn btn-secondary"
-            style={{ cursor: 'pointer' }}
-            onClick={triggerImagePicker}
-          >
+          <label htmlFor={reviewImageInputId} className="btn btn-secondary" style={{ cursor: 'pointer' }}>
             添加图片
-          </button>
+          </label>
           <input
-            ref={imageInputRef}
+            id={reviewImageInputId}
             type="file"
             accept="image/*"
             multiple
-            style={{ display: 'none' }}
+            className="upload-hidden-input"
             onChange={handleImageChange}
           />
 
