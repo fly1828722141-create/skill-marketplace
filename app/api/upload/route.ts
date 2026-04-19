@@ -1,20 +1,19 @@
 /**
- * 文件上传 API
- * 
- * 处理 Skill 包文件的上传逻辑
+ * Skill 发布 API
+ *
+ * 纯链接发布模式：仅接受 Skill 外链，不再上传压缩包文件
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getFileStorageMode, uploadFile, validateFile } from '@/lib/oss';
 import prisma from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { ensureDefaultCategories } from '@/lib/skill-categories';
 import { recordEvent } from '@/lib/event-log';
-import { successResponse, errorResponse, sanitizeFileName } from '@/lib/utils';
+import { successResponse, errorResponse } from '@/lib/utils';
 import { normalizeTagsFromDb, parseTagsInput, toPrismaTagsValue } from '@/lib/tags';
 
 // ===========================================
-// POST /api/upload - 上传文件
+// POST /api/upload - 发布 Skill 链接
 // ===========================================
 export async function POST(request: NextRequest) {
   try {
@@ -26,11 +25,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 解析 FormData
     const formData = await request.formData();
-    const sourceMode = (formData.get('sourceMode') as string) || 'file';
-    const isLinkMode = sourceMode === 'link';
-    const file = formData.get('file') as File | null;
+    const sourceMode = String(formData.get('sourceMode') || '').toLowerCase();
     const title = formData.get('title') as string;
     const summary = formData.get('summary') as string;
     const description = formData.get('description') as string;
@@ -39,7 +35,13 @@ export async function POST(request: NextRequest) {
     const externalUrlRaw = ((formData.get('externalUrl') as string) || '').trim();
     const externalUrlInput = normalizeExternalLinkInput(externalUrlRaw);
 
-    // 验证必填字段
+    if (sourceMode === 'file') {
+      return NextResponse.json(
+        errorResponse('当前站点已切换为纯链接发布，不再支持文件上传', 'FILE_UPLOAD_DISABLED'),
+        { status: 400 }
+      );
+    }
+
     if (!title || !summary || !description || !categoryId) {
       return NextResponse.json(
         errorResponse('缺少必填字段', 'VALIDATION_ERROR'),
@@ -47,23 +49,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (isLinkMode) {
-      if (!externalUrlInput) {
-        return NextResponse.json(
-          errorResponse('缺少 Skill 链接', 'VALIDATION_ERROR'),
-          { status: 400 }
-        );
-      }
-
-      if (!isHttpUrl(externalUrlInput)) {
-        return NextResponse.json(
-          errorResponse('Skill 链接格式不正确，仅支持 http/https', 'VALIDATION_ERROR'),
-          { status: 400 }
-        );
-      }
-    } else if (!file) {
+    if (!externalUrlInput) {
       return NextResponse.json(
-        errorResponse('缺少上传文件', 'VALIDATION_ERROR'),
+        errorResponse('缺少 Skill 链接', 'VALIDATION_ERROR'),
+        { status: 400 }
+      );
+    }
+
+    if (!isHttpUrl(externalUrlInput)) {
+      return NextResponse.json(
+        errorResponse('Skill 链接格式不正确，仅支持 http/https', 'VALIDATION_ERROR'),
         { status: 400 }
       );
     }
@@ -93,97 +88,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let storedFileName = '';
-    let storedFileSize = 0;
-    let storedFileType = '';
-    let fileUrl = '';
-    let localFileBlob:
-      | {
-          fileData: Buffer;
-          originalName: string;
-          mimeType: string | null;
-        }
-      | null = null;
-    const activeStorageMode = isLinkMode ? 'database' : getFileStorageMode();
-    const useObjectStorage = !isLinkMode && activeStorageMode !== 'database';
+    const normalizedUrl = new URL(externalUrlInput).toString();
+    const fileType = inferFileTypeFromUrl(normalizedUrl);
 
-    if (isLinkMode) {
-      const normalizedUrl = new URL(externalUrlInput).toString();
-      storedFileName = normalizedUrl;
-      storedFileType = inferFileTypeFromUrl(normalizedUrl);
-      storedFileSize = 0;
-      fileUrl = normalizedUrl;
-    } else {
-      const selectedFile = file as File;
-
-      // 验证文件
-      const validation = validateFile(selectedFile.name, selectedFile.size);
-      if (!validation.valid) {
-        return NextResponse.json(
-          errorResponse(validation.error || '文件验证失败', 'FILE_VALIDATION_ERROR'),
-          { status: 400 }
-        );
-      }
-
-      // 读取文件为 Buffer
-      const arrayBuffer = await selectedFile.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-
-      // 生成安全的文件名
-      const safeFileName = sanitizeFileName(selectedFile.name);
-      const uniqueFileName = `${Date.now()}-${safeFileName}`;
-
-      storedFileType = selectedFile.name.toLowerCase().endsWith('.tar.gz')
-        ? 'tar.gz'
-        : selectedFile.name.split('.').pop() || '';
-
-      if (useObjectStorage) {
-        // 优先上传到对象存储（OSS/R2）
-        const uploadResult = await uploadFile(buffer, uniqueFileName, selectedFile.type);
-        storedFileName = uploadResult.fileName;
-        storedFileSize = uploadResult.fileSize;
-        fileUrl = uploadResult.url;
-      } else {
-        // 对象存储未配置时，兜底存入数据库
-        storedFileName = selectedFile.name;
-        storedFileSize = selectedFile.size;
-        localFileBlob = {
-          fileData: buffer,
-          originalName: selectedFile.name,
-          mimeType: selectedFile.type || null,
-        };
-      }
-    }
-
-    // 创建技能记录，并在需要时写入数据库文件
-    const createdSkill = await prisma.$transaction(async (tx) => {
-      const created = await tx.skill.create({
-        data: {
-          title,
-          summary: summary.trim(),
-          description,
-          categoryId: category.id,
-          tags: toPrismaTagsValue(tags, prisma) as any,
-          fileName: storedFileName,
-          fileSize: storedFileSize,
-          fileType: storedFileType,
-          authorId: currentUser.id,
-          status: 'active',
-        },
-      });
-
-      if (localFileBlob) {
-        await tx.skillFileBlob.create({
-          data: {
-            skillId: created.id,
-            fileData: localFileBlob.fileData,
-            originalName: localFileBlob.originalName,
-            mimeType: localFileBlob.mimeType,
-          },
-        });
-      }
-
-      return created;
+    const createdSkill = await prisma.skill.create({
+      data: {
+        title,
+        summary: summary.trim(),
+        description,
+        categoryId: category.id,
+        tags: toPrismaTagsValue(tags, prisma) as any,
+        fileName: normalizedUrl,
+        fileSize: 0,
+        fileType,
+        authorId: currentUser.id,
+        status: 'active',
+      },
     });
 
     const skill = await prisma.skill.findUnique({
@@ -210,13 +130,9 @@ export async function POST(request: NextRequest) {
 
     if (!skill) {
       return NextResponse.json(
-        errorResponse('上传成功但读取结果失败，请刷新后查看', 'UPLOAD_RESULT_MISSING'),
+        errorResponse('发布成功但读取结果失败，请刷新后查看', 'UPLOAD_RESULT_MISSING'),
         { status: 500 }
       );
-    }
-
-    if (localFileBlob) {
-      fileUrl = `/api/download/file?skillId=${createdSkill.id}`;
     }
 
     const normalizedSkill = {
@@ -233,10 +149,10 @@ export async function POST(request: NextRequest) {
       skillId: skill.id,
       categoryId: skill.categoryId,
       metadata: {
-        fileType: storedFileType,
-        fileSize: storedFileSize,
-        sourceMode: isLinkMode ? 'link' : 'file',
-        storageMode: isLinkMode ? 'link' : activeStorageMode,
+        fileType,
+        fileSize: 0,
+        sourceMode: 'link',
+        storageMode: 'link',
       },
     });
 
@@ -244,16 +160,16 @@ export async function POST(request: NextRequest) {
       successResponse(
         {
           skill: normalizedSkill,
-          fileUrl,
+          fileUrl: normalizedUrl,
         },
-        isLinkMode ? '链接发布成功' : '上传成功'
+        '链接发布成功'
       ),
       { status: 201 }
     );
   } catch (error: any) {
-    console.error('文件上传失败:', error);
+    console.error('Skill 链接发布失败:', error);
     return NextResponse.json(
-      errorResponse(`上传失败：${error.message}`, 'UPLOAD_ERROR'),
+      errorResponse(`发布失败：${error.message}`, 'UPLOAD_ERROR'),
       { status: 500 }
     );
   }
