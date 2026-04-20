@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { getCurrentUser } from '@/lib/auth';
 import { errorResponse } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -19,14 +18,6 @@ function toSafeAsciiFileName(input: string): string {
 
 export async function GET(request: NextRequest) {
   try {
-    const currentUser = await getCurrentUser();
-    if (!currentUser) {
-      return NextResponse.json(
-        errorResponse('请先登录后下载 Skill', 'UNAUTHORIZED'),
-        { status: 401 }
-      );
-    }
-
     const skillId = request.nextUrl.searchParams.get('skillId');
     if (!skillId) {
       return NextResponse.json(

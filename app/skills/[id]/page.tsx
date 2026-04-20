@@ -135,12 +135,6 @@ export default function SkillDetailPage() {
       return;
     }
 
-    if (!session?.user) {
-      message.warning('请先登录 Google 账号后再下载');
-      router.push('/login');
-      return;
-    }
-
     setDownloading(true);
 
     try {

@@ -24,13 +24,6 @@ export async function POST(request: NextRequest) {
     const actionMode = mode === 'copy' ? 'copy' : 'download';
     const currentUser = await getCurrentUser();
 
-    if (actionMode === 'download' && !currentUser) {
-      return NextResponse.json(
-        errorResponse('请先登录 Google 账号后下载 Skill', 'UNAUTHORIZED'),
-        { status: 401 }
-      );
-    }
-
     if (!skillId) {
       return NextResponse.json(
         errorResponse('缺少技能包 ID', 'VALIDATION_ERROR'),
@@ -50,7 +43,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 已登录用户每次点击都计一次下载
+    // 每次下载/复制行为都计一次下载（含未登录访客）
     const updatedSkill = await prisma.skill.update({
       where: { id: skillId },
       data: {
