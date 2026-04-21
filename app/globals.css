@@ -1937,6 +1937,15 @@ button {
   background: rgba(0, 122, 255, 0.08);
 }
 
+.upload-mode-option.is-disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.upload-mode-option.is-disabled:hover {
+  background: rgba(0, 122, 255, 0.04);
+}
+
 .upload-mode-option.active {
   background: var(--primary);
   color: #fff;

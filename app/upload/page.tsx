@@ -406,13 +406,17 @@ export default function UploadPage() {
                 </button>
                 <button
                   type="button"
-                  className={`upload-mode-option ${sourceMode === 'github-package' ? 'active' : ''}`}
+                  className={`upload-mode-option ${sourceMode === 'github-package' ? 'active' : ''} ${!githubPackageUploadEnabled ? 'is-disabled' : ''}`}
                   onClick={() => {
-                    if (!githubPackageUploadEnabled) return;
                     setSourceMode('github-package');
+                    if (!githubPackageUploadEnabled) {
+                      message.warning(
+                        'GitHub 压缩包发布暂未配置，当前仅可查看说明；配置后即可直接上传'
+                      );
+                    }
                   }}
                   aria-selected={sourceMode === 'github-package'}
-                  disabled={!githubPackageUploadEnabled}
+                  aria-disabled={!githubPackageUploadEnabled}
                   title={
                     githubPackageUploadEnabled
                       ? '上传压缩包并自动发布到 GitHub'
