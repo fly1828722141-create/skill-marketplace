@@ -11,6 +11,7 @@ import { formatNumber } from '@/lib/utils';
 const ALL_CATEGORY_ID = 'all';
 const HOME_SKILLS_CACHE_KEY = 'skill_marketplace_home_skills_v1';
 const HOME_OVERVIEW_CACHE_KEY = 'skill_marketplace_home_overview_v1';
+const LEADERBOARD_LIMIT = 10;
 
 type IconKind = 'data' | 'content' | 'office' | 'dev' | 'image' | 'marketing' | 'generic';
 
@@ -249,7 +250,7 @@ export default function HomePage() {
   );
 
   const leaderboard = useMemo(
-    () => [...filteredSkills].sort((a, b) => b.downloadCount - a.downloadCount).slice(0, 6),
+    () => [...filteredSkills].sort((a, b) => b.downloadCount - a.downloadCount).slice(0, LEADERBOARD_LIMIT),
     [filteredSkills]
   );
 
@@ -388,7 +389,7 @@ export default function HomePage() {
           </div>
           <div className="leaderboard-grid">
             {loading ? (
-              Array.from({ length: 6 }).map((_, idx) => (
+              Array.from({ length: LEADERBOARD_LIMIT }).map((_, idx) => (
                 <div key={idx} className="leaderboard-item skeleton" style={{ height: 76 }} />
               ))
             ) : leaderboard.length === 0 ? (
