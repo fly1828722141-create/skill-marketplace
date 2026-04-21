@@ -152,7 +152,7 @@ export async function publishSkillPackageToGitHub(
   const readmePath = `${skillPath}/README.md`;
   const packageUrl = buildRawUrl(config, packagePath);
 
-  const installCommand = `npx skills add ${packageUrl}`;
+  const installCommand = buildSkillsAddCommand(repoUrl, skillSlug);
   const meta = {
     schemaVersion: 1,
     title: input.title,

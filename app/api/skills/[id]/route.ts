@@ -178,7 +178,7 @@ async function resolveInstallInfo(sourceUrl: string): Promise<ResolvedInstallInf
 
     if (isHttpUrl(packageUrl)) {
       return {
-        installCommand: `npx skills add ${packageUrl}`,
+        installCommand: fallbackInstallCommand,
         packageUrl,
       };
     }
