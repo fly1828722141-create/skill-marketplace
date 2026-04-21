@@ -63,8 +63,7 @@ export default function SkillDetailPage() {
   const sourceUrl =
     isExternalLinkSkill && skill && isHttpUrl(skill.fileName) ? skill.fileName : null;
   const sourceHost = sourceUrl ? safeHost(sourceUrl) : '';
-  const installCommand = sourceUrl ? buildInstallCommand(sourceUrl, skill?.title || '') : '';
-  const skillInstallLink = sourceUrl || '';
+  const installCommand = sourceUrl ? buildInstallCommand(sourceUrl) : '';
   const docBlocks = useMemo(
     () => parseDocBlocks(skill?.description || ''),
     [skill?.description]
@@ -330,34 +329,6 @@ export default function SkillDetailPage() {
                 <code>{installCommand}</code>
               </pre>
               <p className="install-tip">普通用户可直接使用右侧“打开链接/下载”按钮。</p>
-              {skillInstallLink ? (
-                <div className="install-link-row">
-                  <div className="install-link-label">Skill 安装链接</div>
-                  <div className="install-link-main">
-                    <a
-                      href={skillInstallLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="install-link-anchor"
-                    >
-                      {skillInstallLink}
-                    </a>
-                    <button
-                      type="button"
-                      className="copy-btn"
-                      onClick={() =>
-                        void handleCopyText(
-                          skillInstallLink,
-                          'Skill 安装链接已复制'
-                        )
-                      }
-                    >
-                      <CopyIcon />
-                      复制链接
-                    </button>
-                  </div>
-                </div>
-              ) : null}
             </div>
           ) : null}
 
@@ -672,45 +643,6 @@ export default function SkillDetailPage() {
           margin: 10px 0 0;
           font-size: 12px;
           color: #4f6079;
-        }
-
-        .install-link-row {
-          margin-top: 10px;
-          border-top: 1px dashed rgba(12, 86, 170, 0.2);
-          padding-top: 10px;
-        }
-
-        .install-link-label {
-          font-size: 12px;
-          font-weight: 600;
-          color: #35567f;
-          margin-bottom: 8px;
-        }
-
-        .install-link-main {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          flex-wrap: wrap;
-        }
-
-        .install-link-anchor {
-          flex: 1;
-          min-width: 0;
-          border-radius: 10px;
-          padding: 8px 10px;
-          font-size: 12px;
-          color: #0f4f99;
-          background: rgba(255, 255, 255, 0.9);
-          border: 1px solid rgba(12, 86, 170, 0.15);
-          text-decoration: none;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .install-link-anchor:hover {
-          background: rgba(0, 122, 255, 0.08);
         }
 
         .description-text {
@@ -1223,7 +1155,15 @@ function safeHost(value: string): string {
   }
 }
 
-function buildInstallCommand(sourceUrl: string, title: string): string {
+function decodePathSegment(input: string): string {
+  try {
+    return decodeURIComponent(input);
+  } catch {
+    return input;
+  }
+}
+
+function buildInstallCommand(sourceUrl: string): string {
   if (!sourceUrl.includes('github.com')) {
     return sourceUrl;
   }
@@ -1235,7 +1175,7 @@ function buildInstallCommand(sourceUrl: string, title: string): string {
       return sourceUrl;
     }
 
-    const parts = parsed.pathname.split('/').filter(Boolean);
+    const parts = parsed.pathname.split('/').filter(Boolean).map(decodePathSegment);
     if (parts.length < 2) {
       return sourceUrl;
     }
@@ -1250,27 +1190,22 @@ function buildInstallCommand(sourceUrl: string, title: string): string {
     if (treeOrBlobIndex >= 0 && parts.length > treeOrBlobIndex + 3) {
       // owner/repo/tree/<branch>/... 或 owner/repo/blob/<branch>/...
       const repoPathParts = parts.slice(treeOrBlobIndex + 3);
-      const skillsIndex = repoPathParts.indexOf('skills');
+      const skillsIndex = repoPathParts.findIndex(
+        (segment) => segment.toLowerCase() === 'skills'
+      );
 
       if (skillsIndex >= 0 && repoPathParts.length > skillsIndex + 1) {
         derivedSlug = repoPathParts[skillsIndex + 1];
-      } else if (repoPathParts.length > 0) {
-        derivedSlug = repoPathParts[repoPathParts.length - 1];
+      } else if (repoPathParts.length === 1) {
+        derivedSlug = repoPathParts[0];
       }
     }
 
-    const preferredSlugMatch = title.toLowerCase().match(/[a-z0-9]+(?:-[a-z0-9]+)+/);
-    const simpleSlug = title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
+    const skillSlug = derivedSlug.trim();
+    if (!skillSlug) {
+      return `npx skills add ${repoUrl}`;
+    }
 
-    const normalizedDerivedSlug = derivedSlug
-      .toLowerCase()
-      .replace(/[^a-z0-9-]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-
-    const skillSlug = normalizedDerivedSlug || preferredSlugMatch?.[0] || simpleSlug || 'skill-name';
     return `npx skills add ${repoUrl} --skill ${skillSlug}`;
   } catch {
     return sourceUrl;
