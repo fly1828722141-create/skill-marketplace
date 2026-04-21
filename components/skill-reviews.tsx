@@ -59,6 +59,7 @@ export default function SkillReviews({
   const [rating, setRating] = useState('5');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const fetchSeqRef = useRef(0);
   const cacheKey = `${REVIEWS_CACHE_PREFIX}${skillId}`;
   const reviewImageInputId = `review-images-${skillId}`;
@@ -149,6 +150,27 @@ export default function SkillReviews({
       clearInterval(timer);
     };
   }, [skillId, cacheKey]);
+
+  useEffect(() => {
+    if (!previewImageUrl || typeof window === 'undefined') {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setPreviewImageUrl(null);
+      }
+    };
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [previewImageUrl]);
 
   function handleImageChange(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files || []);
@@ -319,6 +341,15 @@ export default function SkillReviews({
     }
   }
 
+  function openImagePreview(url: string) {
+    if (!url) return;
+    setPreviewImageUrl(url);
+  }
+
+  function closeImagePreview() {
+    setPreviewImageUrl(null);
+  }
+
   return (
     <section className={`skill-description-card ${className || ''}`.trim()}>
       <div className="review-header">
@@ -446,15 +477,15 @@ export default function SkillReviews({
               {review.images.length > 0 && (
                 <div className="review-image-grid">
                   {review.images.map((image) => (
-                    <a
+                    <button
+                      type="button"
                       key={image.id}
-                      href={image.url}
-                      target="_blank"
-                      rel="noreferrer"
                       className="review-image-link"
+                      onClick={() => openImagePreview(image.url)}
+                      aria-label="查看评价图片大图"
                     >
                       <img src={image.url} alt="评价图片" className="review-image" />
-                    </a>
+                    </button>
                   ))}
                 </div>
               )}
@@ -462,6 +493,31 @@ export default function SkillReviews({
           ))}
         </div>
       )}
+
+      {previewImageUrl ? (
+        <div
+          className="review-image-preview-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="评价图片预览"
+          onClick={closeImagePreview}
+        >
+          <button
+            type="button"
+            className="review-image-preview-close"
+            onClick={closeImagePreview}
+            aria-label="关闭图片预览"
+          >
+            关闭
+          </button>
+          <img
+            src={previewImageUrl}
+            alt="评价图片预览"
+            className="review-image-preview-img"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      ) : null}
     </section>
   );
 }

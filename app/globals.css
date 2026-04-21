@@ -1727,9 +1727,22 @@ button {
 
 .review-image-link {
   display: block;
+  width: 100%;
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 0;
+  background: #fff;
+  cursor: zoom-in;
+}
+
+.review-image-link:hover {
+  border-color: rgba(0, 122, 255, 0.28);
+}
+
+.review-image-link:focus-visible {
+  outline: 2px solid rgba(0, 122, 255, 0.45);
+  outline-offset: 2px;
 }
 
 .review-image {
@@ -1737,6 +1750,41 @@ button {
   height: 90px;
   object-fit: cover;
   display: block;
+}
+
+.review-image-preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  background: rgba(8, 12, 20, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+}
+
+.review-image-preview-close {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+
+.review-image-preview-img {
+  max-width: min(1200px, 96vw);
+  max-height: 88vh;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.42);
+  background: #fff;
+  object-fit: contain;
 }
 
 /* 上传页 */
