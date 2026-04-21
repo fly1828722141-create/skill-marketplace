@@ -64,8 +64,7 @@ export default function SkillDetailPage() {
     isExternalLinkSkill && skill && isHttpUrl(skill.fileName) ? skill.fileName : null;
   const sourceHost = sourceUrl ? safeHost(sourceUrl) : '';
   const installCommand = sourceUrl ? buildInstallCommand(sourceUrl, skill?.title || '') : '';
-  const aiInstallGithubLink =
-    sourceUrl && sourceUrl.includes('github.com') ? sourceUrl : '';
+  const skillInstallLink = sourceUrl || '';
   const docBlocks = useMemo(
     () => parseDocBlocks(skill?.description || ''),
     [skill?.description]
@@ -317,7 +316,7 @@ export default function SkillDetailPage() {
           {installCommand ? (
             <div className="install-card">
               <div className="install-head">
-                <div className="install-label">INSTALL</div>
+                <div className="install-label">Skill 安装命令</div>
                 <button
                   type="button"
                   className="copy-btn"
@@ -330,25 +329,26 @@ export default function SkillDetailPage() {
               <pre className="install-code">
                 <code>{installCommand}</code>
               </pre>
-              {aiInstallGithubLink ? (
+              <p className="install-tip">普通用户可直接使用右侧“打开链接/下载”按钮。</p>
+              {skillInstallLink ? (
                 <div className="install-link-row">
-                  <div className="install-link-label">AI 安装 GitHub 链接</div>
+                  <div className="install-link-label">Skill 安装链接</div>
                   <div className="install-link-main">
                     <a
-                      href={aiInstallGithubLink}
+                      href={skillInstallLink}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="install-link-anchor"
                     >
-                      {aiInstallGithubLink}
+                      {skillInstallLink}
                     </a>
                     <button
                       type="button"
                       className="copy-btn"
                       onClick={() =>
                         void handleCopyText(
-                          aiInstallGithubLink,
-                          'AI 安装 GitHub 链接已复制'
+                          skillInstallLink,
+                          'Skill 安装链接已复制'
                         )
                       }
                     >
@@ -666,6 +666,12 @@ export default function SkillDetailPage() {
           font-family: 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', monospace;
           white-space: inherit;
           word-break: inherit;
+        }
+
+        .install-tip {
+          margin: 10px 0 0;
+          font-size: 12px;
+          color: #4f6079;
         }
 
         .install-link-row {

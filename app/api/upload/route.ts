@@ -3,7 +3,7 @@
  *
  * 支持：
  * 1) 链接发布（link）
- * 2) 压缩包发布到 GitHub（github-package）
+ * 2) 文件发布（github-package，内部使用 Git 仓库存储）
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     const externalUrlRaw = ((formData.get('externalUrl') as string) || '').trim();
     const externalUrlInput = normalizeExternalLinkInput(externalUrlRaw);
 
-    // github-package 模式字段
+    // 文件发布模式字段
     const packageFile = formData.get('file') as File | null;
 
     if (!title || !summary || !description || !categoryId) {
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
       if (!isGitHubSkillPublishConfigured()) {
         return NextResponse.json(
           errorResponse(
-            'GitHub 压缩包发布未配置，请联系管理员设置 GITHUB_TOKEN / GITHUB_SKILL_OWNER / GITHUB_SKILL_REPO',
+            '文件发布服务暂未配置，请联系管理员开启',
             'GITHUB_PUBLISH_NOT_CONFIGURED'
           ),
           { status: 503 }
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
 
       if (!packageFile) {
         return NextResponse.json(
-          errorResponse('请先选择压缩包文件', 'VALIDATION_ERROR'),
+          errorResponse('请先选择待发布文件', 'VALIDATION_ERROR'),
           { status: 400 }
         );
       }
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // 对外统一走“链接技能”展示：详情页可直接展示 GitHub 链接与安装命令
+      // 对外统一走“链接技能”展示：详情页可直接展示安装链接与安装命令
       fileName = githubResult.sourceUrl;
       fileSize = packageFile.size;
       fileType = inferFileTypeFromFileName(packageFile.name);
@@ -234,11 +234,13 @@ export async function POST(request: NextRequest) {
           sourceUrl: fileUrl,
           installCommand: installCommand || undefined,
           packageUrl: githubPackageUrl || undefined,
+          skillInstallLink:
+            sourceMode === 'github-package' ? fileUrl : undefined,
           aiInstallGithubLink:
             sourceMode === 'github-package' ? fileUrl : undefined,
           sourceMode,
         },
-        sourceMode === 'github-package' ? '已发布到 GitHub，安装命令已生成' : '链接发布成功'
+        sourceMode === 'github-package' ? '文件已发布，安装命令已生成' : '链接发布成功'
       ),
       { status: 201 }
     );

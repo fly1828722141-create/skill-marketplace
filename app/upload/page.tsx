@@ -3,7 +3,7 @@
  *
  * 支持：
  * 1) 链接发布
- * 2) 压缩包发布到 GitHub（生成安装命令）
+ * 2) 文件发布（生成安装命令）
  */
 
 'use client';
@@ -14,6 +14,11 @@ import { message } from 'antd';
 import { useSession } from 'next-auth/react';
 import { SkillCategory } from '@/types';
 import { getFallbackSkillCategories } from '@/lib/category-presets';
+import {
+  SKILL_UPLOAD_ACCEPT,
+  SKILL_UPLOAD_EXTENSIONS_TEXT,
+  isSupportedSkillFile,
+} from '@/lib/skill-upload-format';
 
 type UploadSourceMode = 'link' | 'github-package';
 
@@ -167,11 +172,11 @@ export default function UploadPage() {
 
     if (sourceMode === 'github-package') {
       if (!githubPackageUploadEnabled) {
-        message.error('当前未开启 GitHub 压缩包发布，请联系管理员配置');
+        message.error('当前未开启文件发布服务，请联系管理员配置');
         return;
       }
       if (!file) {
-        message.error('请先选择压缩包文件');
+        message.error('请先选择待发布文件');
         return;
       }
     }
@@ -202,7 +207,7 @@ export default function UploadPage() {
 
       if (response.ok && result?.success) {
         if (sourceMode === 'github-package') {
-          message.success('已上传到 GitHub，详情页可复制 AI 安装命令和 GitHub 链接');
+          message.success('文件已发布，详情页可复制安装命令和 Skill 安装链接');
         } else {
           message.success('链接发布成功！');
         }
@@ -239,9 +244,9 @@ export default function UploadPage() {
       : sourceMode === 'link' && !isHttpUrl(normalizedExternalUrl)
       ? '链接格式不正确，仅支持 http/https'
       : sourceMode === 'github-package' && !githubPackageUploadEnabled
-      ? '当前未开启 GitHub 压缩包发布'
+      ? '当前未开启文件发布服务'
       : sourceMode === 'github-package' && !file
-      ? '请先选择压缩包（.zip/.tar.gz/.rar/.7z）'
+      ? `请先选择文件（${SKILL_UPLOAD_EXTENSIONS_TEXT}）`
       : null;
 
   if (status === 'loading') {
@@ -284,7 +289,7 @@ export default function UploadPage() {
           发布你的 <span>Skill</span>
         </h1>
         <p className="hero-subtitle">
-          支持直接发布链接，或上传压缩包自动同步到 GitHub 并返回可用于 AI 安装的链接与命令。
+          支持直接发布链接，或上传 Skill 文件自动发布并返回可用于 AI 安装的链接与命令。
         </p>
       </section>
 
@@ -392,7 +397,7 @@ export default function UploadPage() {
             <div className="upload-section">
               <div className="upload-section-head">
                 <h2>发布方式</h2>
-                <p>链接模式更快；压缩包模式会自动推送到 GitHub 并生成 AI 可安装链接。</p>
+                <p>链接模式更快；文件模式可自动发布并生成 AI 可安装链接。</p>
               </div>
 
               <div className="upload-mode-switch" role="tablist" aria-label="发布方式">
@@ -411,7 +416,7 @@ export default function UploadPage() {
                     setSourceMode('github-package');
                     if (!githubPackageUploadEnabled) {
                       message.warning(
-                        'GitHub 压缩包发布暂未配置，当前仅可查看说明；配置后即可直接上传'
+                        '文件发布服务暂未配置，当前仅可查看说明；配置后即可直接上传'
                       );
                     }
                   }}
@@ -419,23 +424,23 @@ export default function UploadPage() {
                   aria-disabled={!githubPackageUploadEnabled}
                   title={
                     githubPackageUploadEnabled
-                      ? '上传压缩包并自动发布到 GitHub'
-                      : '管理员尚未配置 GitHub 发布参数'
+                      ? '上传文件并自动发布'
+                      : '管理员尚未配置文件发布参数'
                   }
                 >
-                  📦 GitHub 压缩包发布
+                  📦 文件上传发布
                 </button>
               </div>
 
               {sourceMode === 'github-package' && !githubPackageUploadEnabled ? (
                 <div className="upload-config-banner" role="status">
-                  GitHub 压缩包发布暂未配置，请联系管理员设置 GITHUB_TOKEN / GITHUB_SKILL_OWNER / GITHUB_SKILL_REPO。
+                  文件发布服务暂未配置，请联系管理员开启后再使用。
                 </div>
               ) : null}
 
               {sourceMode === 'github-package' && githubPackageUploadEnabled ? (
                 <div className="upload-config-banner upload-config-banner-info" role="status">
-                  压缩包将自动发布到 GitHub，并在详情页展示可复制的安装命令和 GitHub 链接。
+                  文件将自动发布，并在详情页展示可复制的安装命令和 Skill 安装链接。
                 </div>
               ) : null}
 
@@ -459,7 +464,7 @@ export default function UploadPage() {
               ) : (
                 <div className="form-group">
                   <label htmlFor="skillArchiveFile">
-                    Skill 压缩包 <span className="required">*</span>
+                    Skill 文件 <span className="required">*</span>
                   </label>
                   <button
                     type="button"
@@ -471,16 +476,18 @@ export default function UploadPage() {
                       ⇪
                     </span>
                     <span className="upload-drop-title">
-                      {file ? '文件已就绪，点击可重新选择' : '点击选择 Skill 压缩包'}
+                      {file ? '文件已就绪，点击可重新选择' : '点击选择 Skill 文件'}
                     </span>
-                    <span className="upload-drop-subtitle">支持 .zip / .tar.gz / .rar / .7z，最大 50MB</span>
+                    <span className="upload-drop-subtitle">
+                      支持 {SKILL_UPLOAD_EXTENSIONS_TEXT}，最大 50MB
+                    </span>
                   </button>
                   <input
                     id="skillArchiveFile"
                     type="file"
                     ref={fileInputRef}
                     className="upload-hidden-input"
-                    accept=".zip,.tar.gz,.rar,.7z"
+                    accept={SKILL_UPLOAD_ACCEPT}
                     onChange={handleFileChange}
                     disabled={loading || !githubPackageUploadEnabled}
                   />
@@ -504,7 +511,7 @@ export default function UploadPage() {
                       ? '发布中...'
                       : '发布中...'
                     : sourceMode === 'github-package'
-                    ? '上传并发布到 GitHub'
+                    ? '上传并发布'
                     : '确认发布链接'}
                 </button>
                 <button
@@ -525,7 +532,7 @@ export default function UploadPage() {
               <h3>发布预览</h3>
               <div className="upload-panel-stat">
                 <span>发布方式</span>
-                <strong>{sourceMode === 'link' ? '链接发布' : 'GitHub 压缩包发布'}</strong>
+                <strong>{sourceMode === 'link' ? '链接发布' : '文件上传发布'}</strong>
               </div>
               <div className="upload-panel-stat">
                 <span>当前分类</span>
@@ -538,7 +545,7 @@ export default function UploadPage() {
                 </div>
               ) : (
                 <div className="upload-panel-stat">
-                  <span>压缩包</span>
+                  <span>文件</span>
                   <strong>{file ? file.name : '未选择'}</strong>
                 </div>
               )}
@@ -563,7 +570,7 @@ export default function UploadPage() {
                 <li>标题建议 8-24 字，突出可解决的问题。</li>
                 <li>简介写清“适用人群 + 产出结果”。</li>
                 <li>描述补充使用步骤，复制后更容易上手。</li>
-                <li>若用压缩包模式，系统会自动生成 GitHub 安装链接与命令。</li>
+                <li>若用文件模式，系统会自动生成 Skill 安装链接与命令。</li>
               </ul>
             </div>
           </aside>
@@ -602,12 +609,10 @@ function normalizeExternalLinkInput(input: string): string {
 }
 
 function validatePackageFile(file: File): { valid: boolean; error?: string } {
-  const lowerName = file.name.toLowerCase();
-  const allowedExt = ['.zip', '.tar.gz', '.rar', '.7z'];
-  if (!allowedExt.some((ext) => lowerName.endsWith(ext))) {
+  if (!isSupportedSkillFile(file.name)) {
     return {
       valid: false,
-      error: '不支持的文件类型，仅支持 .zip / .tar.gz / .rar / .7z',
+      error: `不支持的文件类型，仅支持 ${SKILL_UPLOAD_EXTENSIONS_TEXT}`,
     };
   }
 

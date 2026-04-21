@@ -13,6 +13,11 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import {
+  SKILL_UPLOAD_EXTENSIONS,
+  SKILL_UPLOAD_EXTENSIONS_TEXT,
+  detectSkillFileExtension,
+} from '@/lib/skill-upload-format';
 
 type OSSConstructor = new (options: {
   region: string;
@@ -355,18 +360,13 @@ export function validateFile(fileName: string, fileSize: number): {
   valid: boolean;
   error?: string;
 } {
-  const allowedTypes = ['.zip', '.tar.gz', '.rar', '.7z'];
   const maxFileSize = parseInt(process.env.MAX_FILE_SIZE_MB || '50') * 1024 * 1024;
+  const ext = detectSkillFileExtension(fileName);
 
-  const lowerName = fileName.toLowerCase();
-  const ext = lowerName.endsWith('.tar.gz')
-    ? '.tar.gz'
-    : `.${lowerName.split('.').pop() || ''}`;
-
-  if (!allowedTypes.includes(ext)) {
+  if (!SKILL_UPLOAD_EXTENSIONS.includes(ext as (typeof SKILL_UPLOAD_EXTENSIONS)[number])) {
     return {
       valid: false,
-      error: `不支持的文件类型，仅支持：${allowedTypes.join(', ')}`,
+      error: `不支持的文件类型，仅支持：${SKILL_UPLOAD_EXTENSIONS_TEXT}`,
     };
   }
 

@@ -1,4 +1,5 @@
 import { sanitizeFileName } from '@/lib/utils';
+import { detectSkillFileExtension } from '@/lib/skill-upload-format';
 
 interface GitHubSkillPublisherConfig {
   token: string;
@@ -76,13 +77,9 @@ function buildUniqueSlug(title: string): string {
   return `${base}-${stamp}${rand}`.replace(/-+/g, '-');
 }
 
-function detectArchiveExt(fileName: string): string {
-  const lower = fileName.toLowerCase();
-  if (lower.endsWith('.tar.gz')) return '.tar.gz';
-  if (lower.endsWith('.zip')) return '.zip';
-  if (lower.endsWith('.rar')) return '.rar';
-  if (lower.endsWith('.7z')) return '.7z';
-  return '.zip';
+function detectPackageExt(fileName: string): string {
+  const ext = detectSkillFileExtension(fileName);
+  return ext || '.zip';
 }
 
 function encodeRepoPath(path: string): string {
@@ -132,7 +129,7 @@ async function putFileToGitHub(options: {
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`GitHub 文件提交失败(${response.status}): ${text.slice(0, 240)}`);
+    throw new Error(`文件提交失败(${response.status}): ${text.slice(0, 240)}`);
   }
 }
 
@@ -142,12 +139,12 @@ export async function publishSkillPackageToGitHub(
   const config = getConfig();
 
   if (!isGitHubSkillPublishConfigured()) {
-    throw new Error('GitHub 发布未配置，请先设置 GITHUB_TOKEN / GITHUB_SKILL_OWNER / GITHUB_SKILL_REPO');
+    throw new Error('文件发布服务暂未配置');
   }
 
   const repoUrl = buildRepoUrl(config);
-  const archiveExt = detectArchiveExt(input.originalFileName);
-  const safeOriginalName = sanitizeFileName(input.originalFileName || `skill${archiveExt}`);
+  const packageExt = detectPackageExt(input.originalFileName);
+  const safeOriginalName = sanitizeFileName(input.originalFileName || `skill${packageExt}`);
   const skillSlug = buildUniqueSlug(input.title);
   const skillPath = `${config.basePath}/${skillSlug}`;
   const packagePath = `${skillPath}/${safeOriginalName}`;
@@ -169,7 +166,7 @@ export async function publishSkillPackageToGitHub(
     },
     package: {
       fileName: safeOriginalName,
-      extension: archiveExt.replace('.', ''),
+      extension: packageExt.replace(/^\./, ''),
       size: input.fileBuffer.length,
       rawUrl: buildRawUrl(config, packagePath),
     },
