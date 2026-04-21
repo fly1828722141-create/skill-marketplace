@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { message } from 'antd';
 import { useSession } from 'next-auth/react';
+import { isSuperAdminEmail } from '@/lib/dashboard-access';
 import { formatDateTime, formatNumber } from '@/lib/utils';
 
 interface ReviewImage {
@@ -57,9 +58,11 @@ export default function SkillReviews({
   const [content, setContent] = useState('');
   const [rating, setRating] = useState('5');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
   const fetchSeqRef = useRef(0);
   const cacheKey = `${REVIEWS_CACHE_PREFIX}${skillId}`;
   const reviewImageInputId = `review-images-${skillId}`;
+  const isAdmin = isSuperAdminEmail(session?.user?.email);
 
   const canSubmit = useMemo(() => {
     return content.trim().length > 0 || imageFiles.length > 0;
@@ -275,6 +278,47 @@ export default function SkillReviews({
     }
   }
 
+  async function deleteReview(reviewId: string) {
+    if (!session?.user) {
+      router.push('/login');
+      return;
+    }
+
+    if (!isAdmin) {
+      message.error('仅管理员可删除评价');
+      return;
+    }
+
+    const confirmed =
+      typeof window === 'undefined'
+        ? true
+        : window.confirm('确认删除这条评价吗？该操作不可恢复。');
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingReviewId(reviewId);
+    try {
+      const response = await fetch(`/api/reviews/${reviewId}`, {
+        method: 'DELETE',
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '删除评价失败');
+      }
+
+      message.success('评价已删除');
+      await fetchReviews({ silent: true });
+    } catch (error: any) {
+      console.error('删除评价失败:', error);
+      message.error(error.message || '删除评价失败');
+    } finally {
+      setDeletingReviewId((prev) => (prev === reviewId ? null : prev));
+    }
+  }
+
   return (
     <section className={`skill-description-card ${className || ''}`.trim()}>
       <div className="review-header">
@@ -375,6 +419,16 @@ export default function SkillReviews({
                   {typeof review.rating === 'number' && (
                     <span className="review-rating-badge">{review.rating} 星</span>
                   )}
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      className="review-delete-btn"
+                      disabled={deletingReviewId === review.id}
+                      onClick={() => void deleteReview(review.id)}
+                    >
+                      {deletingReviewId === review.id ? '删除中...' : '删除'}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className={`review-like-btn ${

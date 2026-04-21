@@ -1,4 +1,4 @@
-export const DASHBOARD_OWNER_EMAIL = 'ly1828722141@gmail.com';
+export const DASHBOARD_OWNER_EMAIL = 'fly1828722141@gmail.com';
 
 export function isDashboardOwnerEmail(email?: string | null): boolean {
   if (!email) return false;

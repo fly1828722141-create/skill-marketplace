@@ -1691,6 +1691,20 @@ button {
   cursor: pointer;
 }
 
+.review-delete-btn {
+  border: 1px solid rgba(255, 59, 48, 0.35);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: rgba(255, 59, 48, 0.1);
+  color: #a62118;
+  cursor: pointer;
+}
+
+.review-delete-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .review-like-btn.active {
   border-color: rgba(0, 122, 255, 0.3);
   color: var(--primary);
