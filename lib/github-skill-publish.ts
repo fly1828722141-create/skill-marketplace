@@ -150,8 +150,9 @@ export async function publishSkillPackageToGitHub(
   const packagePath = `${skillPath}/${safeOriginalName}`;
   const metaPath = `${skillPath}/skill.json`;
   const readmePath = `${skillPath}/README.md`;
+  const packageUrl = buildRawUrl(config, packagePath);
 
-  const installCommand = buildSkillsAddCommand(repoUrl, skillSlug);
+  const installCommand = `npx skills add ${packageUrl}`;
   const meta = {
     schemaVersion: 1,
     title: input.title,
@@ -168,7 +169,7 @@ export async function publishSkillPackageToGitHub(
       fileName: safeOriginalName,
       extension: packageExt.replace(/^\./, ''),
       size: input.fileBuffer.length,
-      rawUrl: buildRawUrl(config, packagePath),
+      rawUrl: packageUrl,
     },
   };
 
@@ -195,7 +196,7 @@ export async function publishSkillPackageToGitHub(
     '',
     '## Package URL',
     '',
-    buildRawUrl(config, packagePath),
+    packageUrl,
     '',
   ].join('\n');
 
@@ -227,7 +228,7 @@ export async function publishSkillPackageToGitHub(
     skillSlug,
     skillPath,
     sourceUrl: buildTreeUrl(config, skillPath),
-    packageUrl: buildRawUrl(config, packagePath),
+    packageUrl,
     installCommand,
   };
 }

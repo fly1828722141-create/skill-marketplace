@@ -44,6 +44,8 @@ export interface Skill {
   fileName: string;
   fileSize: number;
   fileType: string;
+  installCommand?: string;
+  packageUrl?: string;
   downloadCount: number;
   viewCount: number;
   ratingAvg?: number | null;

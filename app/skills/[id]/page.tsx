@@ -63,7 +63,9 @@ export default function SkillDetailPage() {
   const sourceUrl =
     isExternalLinkSkill && skill && isHttpUrl(skill.fileName) ? skill.fileName : null;
   const sourceHost = sourceUrl ? safeHost(sourceUrl) : '';
-  const installCommand = sourceUrl ? buildInstallCommand(sourceUrl) : '';
+  const installCommand =
+    (skill?.installCommand || '').trim() ||
+    (sourceUrl ? buildInstallCommand(sourceUrl) : '');
   const docBlocks = useMemo(
     () => parseDocBlocks(skill?.description || ''),
     [skill?.description]

@@ -207,7 +207,7 @@ export default function UploadPage() {
 
       if (response.ok && result?.success) {
         if (sourceMode === 'github-package') {
-          message.success('文件已发布，详情页可复制安装命令和 Skill 安装链接');
+          message.success('文件已发布，详情页可复制安装命令');
         } else {
           message.success('链接发布成功！');
         }
@@ -289,7 +289,7 @@ export default function UploadPage() {
           发布你的 <span>Skill</span>
         </h1>
         <p className="hero-subtitle">
-          支持直接发布链接，或上传 Skill 文件自动发布并返回可用于 AI 安装的链接与命令。
+          支持直接发布链接，或上传 Skill 文件自动发布并返回可直接执行的安装命令。
         </p>
       </section>
 
@@ -397,7 +397,7 @@ export default function UploadPage() {
             <div className="upload-section">
               <div className="upload-section-head">
                 <h2>发布方式</h2>
-                <p>链接模式更快；文件模式可自动发布并生成 AI 可安装链接。</p>
+                <p>链接模式更快；文件模式可自动发布并生成可直接执行的安装命令。</p>
               </div>
 
               <div className="upload-mode-switch" role="tablist" aria-label="发布方式">
@@ -440,7 +440,7 @@ export default function UploadPage() {
 
               {sourceMode === 'github-package' && githubPackageUploadEnabled ? (
                 <div className="upload-config-banner upload-config-banner-info" role="status">
-                  文件将自动发布，并在详情页展示可复制的安装命令和 Skill 安装链接。
+                  文件将自动发布，并在详情页展示可复制的安装命令。
                 </div>
               ) : null}
 
@@ -570,7 +570,7 @@ export default function UploadPage() {
                 <li>标题建议 8-24 字，突出可解决的问题。</li>
                 <li>简介写清“适用人群 + 产出结果”。</li>
                 <li>描述补充使用步骤，复制后更容易上手。</li>
-                <li>若用文件模式，系统会自动生成 Skill 安装链接与命令。</li>
+                <li>若用文件模式，系统会自动生成可直接执行的安装命令。</li>
               </ul>
             </div>
           </aside>

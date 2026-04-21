@@ -10,6 +10,185 @@ import { successResponse, errorResponse } from '@/lib/utils';
 import { normalizeTagsFromDb, parseTagsInput, toPrismaTagsValue } from '@/lib/tags';
 import { ensureDefaultCategories } from '@/lib/skill-categories';
 
+interface ResolvedInstallInfo {
+  installCommand?: string;
+  packageUrl?: string;
+}
+
+interface ParsedGitHubTreeUrl {
+  owner: string;
+  repo: string;
+  branch: string;
+  repoPath: string;
+  skillSlug: string;
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function decodePathSegment(input: string): string {
+  try {
+    return decodeURIComponent(input);
+  } catch {
+    return input;
+  }
+}
+
+function encodePathSegments(input: string): string {
+  return input
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+}
+
+function parseGitHubTreeUrl(sourceUrl: string): ParsedGitHubTreeUrl | null {
+  try {
+    const parsed = new URL(sourceUrl);
+    const host = parsed.hostname.toLowerCase();
+    if (host !== 'github.com' && host !== 'www.github.com') {
+      return null;
+    }
+
+    const parts = parsed.pathname
+      .split('/')
+      .filter(Boolean)
+      .map((segment) => decodePathSegment(segment));
+
+    if (parts.length < 4) {
+      return null;
+    }
+
+    const owner = parts[0];
+    const repo = parts[1].replace(/\.git$/, '');
+    const treeOrBlobIndex = parts.findIndex(
+      (segment, index) => index >= 2 && (segment === 'tree' || segment === 'blob')
+    );
+
+    if (treeOrBlobIndex < 0 || parts.length <= treeOrBlobIndex + 1) {
+      return null;
+    }
+
+    const remainder = parts.slice(treeOrBlobIndex + 1);
+    const skillsIndex = remainder.findIndex((segment) => segment.toLowerCase() === 'skills');
+    const branchParts = skillsIndex > 0 ? remainder.slice(0, skillsIndex) : remainder.slice(0, 1);
+    const repoPathParts = skillsIndex > 0 ? remainder.slice(skillsIndex) : remainder.slice(1);
+    const branch = branchParts.join('/').trim();
+    const repoPath = repoPathParts.join('/').trim();
+
+    if (!owner || !repo || !branch) {
+      return null;
+    }
+
+    let skillSlug = '';
+    if (repoPathParts.length > 0) {
+      const repoSkillsIndex = repoPathParts.findIndex(
+        (segment) => segment.toLowerCase() === 'skills'
+      );
+      if (repoSkillsIndex >= 0 && repoPathParts.length > repoSkillsIndex + 1) {
+        skillSlug = repoPathParts[repoSkillsIndex + 1].trim();
+      } else if (repoPathParts.length === 1) {
+        skillSlug = repoPathParts[0].trim();
+      }
+    }
+
+    return {
+      owner,
+      repo,
+      branch,
+      repoPath,
+      skillSlug,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildRepoUrl(owner: string, repo: string): string {
+  return `https://github.com/${owner}/${repo}`;
+}
+
+function buildRawGithubUrl(
+  owner: string,
+  repo: string,
+  branch: string,
+  repoPath: string
+): string {
+  return `https://raw.githubusercontent.com/${owner}/${repo}/${encodePathSegments(
+    branch
+  )}/${encodePathSegments(repoPath)}`;
+}
+
+async function resolveInstallInfo(sourceUrl: string): Promise<ResolvedInstallInfo> {
+  if (!isHttpUrl(sourceUrl)) {
+    return {};
+  }
+
+  const githubTreeInfo = parseGitHubTreeUrl(sourceUrl);
+  if (!githubTreeInfo) {
+    return {
+      installCommand: `npx skills add ${sourceUrl}`,
+    };
+  }
+
+  const repoUrl = buildRepoUrl(githubTreeInfo.owner, githubTreeInfo.repo);
+  const fallbackInstallCommand = githubTreeInfo.skillSlug
+    ? `npx skills add ${repoUrl} --skill ${githubTreeInfo.skillSlug}`
+    : `npx skills add ${repoUrl}`;
+
+  if (!githubTreeInfo.repoPath) {
+    return { installCommand: fallbackInstallCommand };
+  }
+
+  try {
+    const skillJsonPath = `${githubTreeInfo.repoPath.replace(/\/+$/, '')}/skill.json`;
+    const manifestUrl = buildRawGithubUrl(
+      githubTreeInfo.owner,
+      githubTreeInfo.repo,
+      githubTreeInfo.branch,
+      skillJsonPath
+    );
+
+    const abortController = new AbortController();
+    const timeoutHandle = setTimeout(() => abortController.abort(), 3000);
+    let manifestResponse: Response;
+
+    try {
+      manifestResponse = await fetch(manifestUrl, {
+        cache: 'no-store',
+        signal: abortController.signal,
+      });
+    } finally {
+      clearTimeout(timeoutHandle);
+    }
+
+    if (!manifestResponse.ok) {
+      return { installCommand: fallbackInstallCommand };
+    }
+
+    const manifest = await manifestResponse.json();
+    const packageUrl =
+      typeof manifest?.package?.rawUrl === 'string' ? manifest.package.rawUrl.trim() : '';
+
+    if (isHttpUrl(packageUrl)) {
+      return {
+        installCommand: `npx skills add ${packageUrl}`,
+        packageUrl,
+      };
+    }
+  } catch {
+    // 忽略外部源解析失败，回退到仓库安装命令
+  }
+
+  return { installCommand: fallbackInstallCommand };
+}
+
 // ===========================================
 // GET /api/skills/[id] - 获取技能包详情
 // ===========================================
@@ -109,11 +288,15 @@ export async function GET(
       },
     });
 
+    const installInfo = await resolveInstallInfo(skill.fileName);
+
     const normalizedSkill = {
       ...skill,
       tags: normalizeTagsFromDb(skill.tags),
       ratingAvg: ratingAggregate._avg.rating ?? null,
       ratingCount: skill._count?.comments ?? 0,
+      installCommand: installInfo.installCommand,
+      packageUrl: installInfo.packageUrl,
     };
 
     return NextResponse.json(successResponse(normalizedSkill));
