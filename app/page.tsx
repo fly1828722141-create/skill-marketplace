@@ -11,6 +11,7 @@ import { formatNumber } from '@/lib/utils';
 const ALL_CATEGORY_ID = 'all';
 const HOME_SKILLS_CACHE_KEY = 'skill_marketplace_home_skills_v1';
 const HOME_OVERVIEW_CACHE_KEY = 'skill_marketplace_home_overview_v1';
+const HOME_SHOWCASE_LIMIT = 3;
 const LEADERBOARD_LIMIT = 10;
 
 type IconKind = 'data' | 'content' | 'office' | 'dev' | 'image' | 'marketing' | 'generic';
@@ -240,12 +241,15 @@ export default function HomePage() {
   }, [skills, activeCategoryId, keyword]);
 
   const hotSkills = useMemo(
-    () => [...filteredSkills].sort((a, b) => b.viewCount - a.viewCount).slice(0, 4),
+    () => [...filteredSkills].sort((a, b) => b.viewCount - a.viewCount).slice(0, HOME_SHOWCASE_LIMIT),
     [filteredSkills]
   );
 
   const newSkills = useMemo(
-    () => [...filteredSkills].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)).slice(0, 4),
+    () =>
+      [...filteredSkills]
+        .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
+        .slice(0, HOME_SHOWCASE_LIMIT),
     [filteredSkills]
   );
 
@@ -352,10 +356,12 @@ export default function HomePage() {
               });
 
               if (category.id === ALL_CATEGORY_ID) {
-                router.push('/skills');
+                router.push('/skills?sortBy=downloadCount&sortOrder=desc');
                 return;
               }
-              router.push(`/skills?categoryId=${category.id}`);
+              router.push(
+                `/skills?categoryId=${category.id}&sortBy=downloadCount&sortOrder=desc`
+              );
             }}
           >
             {category.name}
@@ -473,7 +479,7 @@ function SkillGrid({
   if (loading) {
     return (
       <div className="skills-grid">
-        {Array.from({ length: 4 }).map((_, idx) => (
+        {Array.from({ length: HOME_SHOWCASE_LIMIT }).map((_, idx) => (
           <div key={idx} className="skill-card skeleton-card">
             <div className="skeleton" style={{ width: 64, height: 64, borderRadius: 12 }} />
             <div className="skeleton" style={{ width: '60%', height: 20, marginTop: 12 }} />

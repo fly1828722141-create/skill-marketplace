@@ -231,8 +231,11 @@ export async function POST(request: NextRequest) {
         {
           skill: normalizedSkill,
           fileUrl,
+          sourceUrl: fileUrl,
           installCommand: installCommand || undefined,
           packageUrl: githubPackageUrl || undefined,
+          aiInstallGithubLink:
+            sourceMode === 'github-package' ? fileUrl : undefined,
           sourceMode,
         },
         sourceMode === 'github-package' ? '已发布到 GitHub，安装命令已生成' : '链接发布成功'

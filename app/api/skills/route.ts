@@ -27,13 +27,13 @@ export async function GET(request: NextRequest) {
     const tags = parseTagsInput(searchParams.get('tags'));
     const authorId = searchParams.get('authorId') || undefined;
     const categoryId = searchParams.get('categoryId') || undefined;
-    const sortByInput = searchParams.get('sortBy') || 'createdAt';
+    const sortByInput = searchParams.get('sortBy') || 'downloadCount';
     const sortOrderInput = searchParams.get('sortOrder') || 'desc';
     const sortBy = ['createdAt', 'downloadCount', 'viewCount', 'updatedAt'].includes(
       sortByInput
     )
       ? sortByInput
-      : 'createdAt';
+      : 'downloadCount';
     const sortOrder = sortOrderInput === 'asc' ? 'asc' : 'desc';
     const page = parseInt(searchParams.get('page') || '1', 10);
     const pageSize = parseInt(searchParams.get('pageSize') || '20', 10);

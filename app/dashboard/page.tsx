@@ -158,45 +158,19 @@ export default function DashboardPage() {
     };
   }, [days, isDashboardOwner]);
 
+  useEffect(() => {
+    if (status === 'loading') return;
+    if (!session?.user || !isDashboardOwner) {
+      router.replace('/');
+    }
+  }, [isDashboardOwner, router, session?.user, status]);
+
   if (status === 'loading') {
     return <div className="loading-page">加载中...</div>;
   }
 
-  if (!session?.user) {
-    return (
-      <div className="dashboard-page">
-        <div className="dashboard-card" style={{ textAlign: 'center' }}>
-          <h2>请先登录后查看数据看板</h2>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => router.push('/login')}
-          >
-            使用 Google 登录
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isDashboardOwner) {
-    return (
-      <div className="dashboard-page">
-        <div className="dashboard-card" style={{ textAlign: 'center' }}>
-          <h2>仅 fly 管理员账号可查看数据看板</h2>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
-            当前登录账号无权限访问该页面
-          </p>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => router.push('/')}
-          >
-            返回首页
-          </button>
-        </div>
-      </div>
-    );
+  if (!session?.user || !isDashboardOwner) {
+    return <div className="loading-page">页面跳转中...</div>;
   }
 
   return (

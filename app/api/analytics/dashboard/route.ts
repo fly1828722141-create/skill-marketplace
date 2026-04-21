@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
 
     if (!isDashboardOwnerEmail(currentUser.email)) {
       return NextResponse.json(
-        errorResponse('仅 fly 管理员账号可查看数据看板', 'FORBIDDEN'),
+        errorResponse('无权限访问数据看板', 'FORBIDDEN'),
         { status: 403 }
       );
     }

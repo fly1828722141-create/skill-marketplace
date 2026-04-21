@@ -22,7 +22,10 @@ export default function NavLinks() {
       <Link href="/" className={getNavClass(pathname, '/')}>
         首页
       </Link>
-      <Link href="/skills" className={getNavClass(pathname, '/skills')}>
+      <Link
+        href="/skills?sortBy=downloadCount&sortOrder=desc"
+        className={getNavClass(pathname, '/skills')}
+      >
         分类
       </Link>
       <Link href="/#leaderboard" className="nav-link">

@@ -46,7 +46,7 @@ function normalizeSortBy(value: string | null): SortField {
   if (value === 'downloadCount' || value === 'viewCount' || value === 'createdAt') {
     return value;
   }
-  return 'createdAt';
+  return 'downloadCount';
 }
 
 function normalizeSortOrder(value: string | null): SortOrder {

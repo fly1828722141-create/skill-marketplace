@@ -64,6 +64,8 @@ export default function SkillDetailPage() {
     isExternalLinkSkill && skill && isHttpUrl(skill.fileName) ? skill.fileName : null;
   const sourceHost = sourceUrl ? safeHost(sourceUrl) : '';
   const installCommand = sourceUrl ? buildInstallCommand(sourceUrl, skill?.title || '') : '';
+  const aiInstallGithubLink =
+    sourceUrl && sourceUrl.includes('github.com') ? sourceUrl : '';
   const docBlocks = useMemo(
     () => parseDocBlocks(skill?.description || ''),
     [skill?.description]
@@ -328,6 +330,34 @@ export default function SkillDetailPage() {
               <pre className="install-code">
                 <code>{installCommand}</code>
               </pre>
+              {aiInstallGithubLink ? (
+                <div className="install-link-row">
+                  <div className="install-link-label">AI 安装 GitHub 链接</div>
+                  <div className="install-link-main">
+                    <a
+                      href={aiInstallGithubLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="install-link-anchor"
+                    >
+                      {aiInstallGithubLink}
+                    </a>
+                    <button
+                      type="button"
+                      className="copy-btn"
+                      onClick={() =>
+                        void handleCopyText(
+                          aiInstallGithubLink,
+                          'AI 安装 GitHub 链接已复制'
+                        )
+                      }
+                    >
+                      <CopyIcon />
+                      复制链接
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -636,6 +666,45 @@ export default function SkillDetailPage() {
           font-family: 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', monospace;
           white-space: inherit;
           word-break: inherit;
+        }
+
+        .install-link-row {
+          margin-top: 10px;
+          border-top: 1px dashed rgba(12, 86, 170, 0.2);
+          padding-top: 10px;
+        }
+
+        .install-link-label {
+          font-size: 12px;
+          font-weight: 600;
+          color: #35567f;
+          margin-bottom: 8px;
+        }
+
+        .install-link-main {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .install-link-anchor {
+          flex: 1;
+          min-width: 0;
+          border-radius: 10px;
+          padding: 8px 10px;
+          font-size: 12px;
+          color: #0f4f99;
+          background: rgba(255, 255, 255, 0.9);
+          border: 1px solid rgba(12, 86, 170, 0.15);
+          text-decoration: none;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .install-link-anchor:hover {
+          background: rgba(0, 122, 255, 0.08);
         }
 
         .description-text {

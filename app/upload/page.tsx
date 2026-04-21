@@ -92,7 +92,9 @@ export default function UploadPage() {
 
         const enabled = Boolean(result?.data?.githubPackageUploadEnabled);
         setGithubPackageUploadEnabled(enabled);
-        if (!enabled) {
+        if (enabled) {
+          setSourceMode('github-package');
+        } else {
           setSourceMode('link');
         }
       } catch (error) {
@@ -200,7 +202,7 @@ export default function UploadPage() {
 
       if (response.ok && result?.success) {
         if (sourceMode === 'github-package') {
-          message.success('已上传到 GitHub，详情页可一键复制安装命令');
+          message.success('已上传到 GitHub，详情页可复制 AI 安装命令和 GitHub 链接');
         } else {
           message.success('链接发布成功！');
         }
@@ -281,7 +283,9 @@ export default function UploadPage() {
         <h1 className="hero-title">
           发布你的 <span>Skill</span>
         </h1>
-        <p className="hero-subtitle">支持直接发布链接，或上传压缩包自动同步到 GitHub 并生成安装命令。</p>
+        <p className="hero-subtitle">
+          支持直接发布链接，或上传压缩包自动同步到 GitHub 并返回可用于 AI 安装的链接与命令。
+        </p>
       </section>
 
       <section className="content-section">
@@ -388,7 +392,7 @@ export default function UploadPage() {
             <div className="upload-section">
               <div className="upload-section-head">
                 <h2>发布方式</h2>
-                <p>链接模式更快；压缩包模式会自动推送到 GitHub 并生成安装命令。</p>
+                <p>链接模式更快；压缩包模式会自动推送到 GitHub 并生成 AI 可安装链接。</p>
               </div>
 
               <div className="upload-mode-switch" role="tablist" aria-label="发布方式">
@@ -427,7 +431,7 @@ export default function UploadPage() {
 
               {sourceMode === 'github-package' && githubPackageUploadEnabled ? (
                 <div className="upload-config-banner upload-config-banner-info" role="status">
-                  压缩包将自动发布到 GitHub，并在详情页生成可复制安装命令。
+                  压缩包将自动发布到 GitHub，并在详情页展示可复制的安装命令和 GitHub 链接。
                 </div>
               ) : null}
 
@@ -555,7 +559,7 @@ export default function UploadPage() {
                 <li>标题建议 8-24 字，突出可解决的问题。</li>
                 <li>简介写清“适用人群 + 产出结果”。</li>
                 <li>描述补充使用步骤，复制后更容易上手。</li>
-                <li>若用压缩包模式，系统会自动生成 GitHub 安装命令。</li>
+                <li>若用压缩包模式，系统会自动生成 GitHub 安装链接与命令。</li>
               </ul>
             </div>
           </aside>
