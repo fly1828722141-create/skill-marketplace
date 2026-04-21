@@ -26,7 +26,7 @@ export default function NavLinks() {
         href="/skills?sortBy=downloadCount&sortOrder=desc"
         className={getNavClass(pathname, '/skills')}
       >
-        分类
+        技能库
       </Link>
       <Link href="/#leaderboard" className="nav-link">
         排行榜

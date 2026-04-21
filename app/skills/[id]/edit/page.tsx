@@ -118,7 +118,7 @@ export default function SkillEditPage() {
     }
 
     if (!form.categoryId) {
-      message.warning('请选择 Skill 分类');
+      message.warning('请选择所属数字人');
       return;
     }
 
@@ -225,13 +225,13 @@ export default function SkillEditPage() {
         </div>
 
         <div className="form-group">
-          <label>Skill 分类</label>
+          <label>所属数字人</label>
           <select
             className="input"
             value={form.categoryId}
             onChange={(event) => setForm((prev) => ({ ...prev, categoryId: event.target.value }))}
           >
-            <option value="">请选择分类</option>
+            <option value="">请选择数字人</option>
             {categories.map((category) => (
               <option key={category.id} value={category.id}>
                 {category.name}

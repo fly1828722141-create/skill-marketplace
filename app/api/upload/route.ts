@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     if (!category) {
       return NextResponse.json(
-        errorResponse('请选择有效的 Skill 分类', 'VALIDATION_ERROR'),
+        errorResponse('请选择有效的数字人', 'VALIDATION_ERROR'),
         { status: 400 }
       );
     }

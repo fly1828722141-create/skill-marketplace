@@ -52,33 +52,52 @@ export async function GET(request: NextRequest) {
     const startAt = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     const endAt = new Date();
 
-    const [totalSkills, totalUsers, skillStats, topSkills] = await Promise.all([
-      prisma.skill.count({ where: { status: 'active' } }),
-      prisma.user.count(),
-      prisma.skill.aggregate({
-        _sum: {
-          downloadCount: true,
-          viewCount: true,
-        },
-      }),
-      prisma.skill.findMany({
-        where: { status: 'active' },
-        orderBy: { downloadCount: 'desc' },
-        take: 5,
-        select: {
-          id: true,
-          title: true,
-          downloadCount: true,
-          viewCount: true,
-          category: {
-            select: {
-              id: true,
-              name: true,
+    const [totalSkills, totalUsers, totalHumans, skillStats, topSkills, humanSkillRaw] =
+      await Promise.all([
+        prisma.skill.count({ where: { status: 'active' } }),
+        prisma.user.count(),
+        prisma.skillCategory.count({ where: { status: 'active' } }),
+        prisma.skill.aggregate({
+          _sum: {
+            downloadCount: true,
+            viewCount: true,
+          },
+        }),
+        prisma.skill.findMany({
+          where: { status: 'active' },
+          orderBy: { downloadCount: 'desc' },
+          take: 5,
+          select: {
+            id: true,
+            title: true,
+            downloadCount: true,
+            viewCount: true,
+            category: {
+              select: {
+                id: true,
+                slug: true,
+                name: true,
+              },
             },
           },
-        },
-      }),
-    ]);
+        }),
+        prisma.skill.groupBy({
+          by: ['categoryId'],
+          where: {
+            status: 'active',
+            categoryId: {
+              not: null,
+            },
+          },
+          _count: {
+            _all: true,
+          },
+          _sum: {
+            downloadCount: true,
+            viewCount: true,
+          },
+        }),
+      ]);
 
     let totalEvents = 0;
     let pageViews = 0;
@@ -94,9 +113,9 @@ export async function GET(request: NextRequest) {
     }> = [];
     let eventTopRaw: Array<{ eventName: string; _count: { _all: number } }> = [];
     let moduleTopRaw: Array<{ module: string | null; _count: { _all: number } }> = [];
-    let categoryTopRaw: Array<{ categoryId: string | null; _count: { _all: number } }> = [];
+    let humanClickTopRaw: Array<{ categoryId: string | null; _count: { _all: number } }> = [];
     let trendRaw: Array<{ createdAt: Date; eventName: string }> = [];
-    let categoryTrendRaw: Array<{ createdAt: Date; categoryId: string | null }> = [];
+    let humanClickTrendRaw: Array<{ createdAt: Date; categoryId: string | null }> = [];
     let activeUsersRaw: Array<{ userId: string | null; _count: { _all: number } }> = [];
 
     try {
@@ -111,9 +130,9 @@ export async function GET(request: NextRequest) {
         visitorsRaw,
         eventTopRaw,
         moduleTopRaw,
-        categoryTopRaw,
+        humanClickTopRaw,
         trendRaw,
-        categoryTrendRaw,
+        humanClickTrendRaw,
         activeUsersRaw,
       ] = await Promise.all([
         prisma.eventLog.count({
@@ -226,19 +245,24 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    const categoryIds = categoryTopRaw
+    const humanIdsFromClicks = humanClickTopRaw
       .map((item) => item.categoryId)
       .filter((value): value is string => typeof value === 'string');
-    const categoryTrendIds = categoryTrendRaw
+    const humanIdsFromTrends = humanClickTrendRaw
+      .map((item) => item.categoryId)
+      .filter((value): value is string => typeof value === 'string');
+    const humanIdsFromSkills = humanSkillRaw
       .map((item) => item.categoryId)
       .filter((value): value is string => typeof value === 'string');
 
-    const categories =
-      [...categoryIds, ...categoryTrendIds].length > 0
+    const allHumanIds = [...new Set([...humanIdsFromClicks, ...humanIdsFromTrends, ...humanIdsFromSkills])];
+
+    const humans =
+      allHumanIds.length > 0
         ? await prisma.skillCategory.findMany({
             where: {
               id: {
-                in: [...new Set([...categoryIds, ...categoryTrendIds])],
+                in: allHumanIds,
               },
             },
             select: {
@@ -249,13 +273,10 @@ export async function GET(request: NextRequest) {
           })
         : [];
 
-    const categoryNameMap = categories.reduce<Record<string, string>>(
-      (acc, category) => {
-        acc[category.id] = category.name;
-        return acc;
-      },
-      {}
-    );
+    const humanNameMap = humans.reduce<Record<string, string>>((acc, item) => {
+      acc[item.id] = item.name;
+      return acc;
+    }, {});
 
     const dateKeys = buildDateKeys(startAt, endAt);
     const trendMap: Record<
@@ -300,40 +321,56 @@ export async function GET(request: NextRequest) {
     const trends = Object.values(trendMap).sort((a, b) =>
       a.date.localeCompare(b.date)
     );
-    const topCategoriesSorted = categoryTopRaw
+
+    const topHumansSorted = humanClickTopRaw
       .sort((a, b) => b._count._all - a._count._all)
       .slice(0, 10);
-    const topCategoryIds = topCategoriesSorted
+
+    const topHumanIdsForTrend = topHumansSorted
       .map((item) => item.categoryId)
       .filter((value): value is string => typeof value === 'string')
       .slice(0, 5);
 
-    const categoryTrendCounter: Record<string, Record<string, number>> = {};
-    topCategoryIds.forEach((categoryId) => {
-      categoryTrendCounter[categoryId] = {};
+    const humanTrendCounter: Record<string, Record<string, number>> = {};
+    topHumanIdsForTrend.forEach((humanId) => {
+      humanTrendCounter[humanId] = {};
       dateKeys.forEach((dateKey) => {
-        categoryTrendCounter[categoryId][dateKey] = 0;
+        humanTrendCounter[humanId][dateKey] = 0;
       });
     });
 
-    categoryTrendRaw.forEach((row) => {
-      if (!row.categoryId || !topCategoryIds.includes(row.categoryId)) {
+    humanClickTrendRaw.forEach((row) => {
+      if (!row.categoryId || !topHumanIdsForTrend.includes(row.categoryId)) {
         return;
       }
       const dateKey = toDateKey(row.createdAt);
-      if (categoryTrendCounter[row.categoryId]?.[dateKey] !== undefined) {
-        categoryTrendCounter[row.categoryId][dateKey] += 1;
+      if (humanTrendCounter[row.categoryId]?.[dateKey] !== undefined) {
+        humanTrendCounter[row.categoryId][dateKey] += 1;
       }
     });
 
-    const categoryTrends = topCategoryIds.map((categoryId) => ({
-      categoryId,
-      categoryName: categoryNameMap[categoryId] || '未知分类',
+    const humanTrends = topHumanIdsForTrend.map((humanId) => ({
+      categoryId: humanId,
+      categoryName: humanNameMap[humanId] || '未知数字人',
       points: dateKeys.map((date) => ({
         date,
-        count: categoryTrendCounter[categoryId][date] || 0,
+        count: humanTrendCounter[humanId][date] || 0,
       })),
     }));
+
+    const humansBySkill = humanSkillRaw
+      .filter((item): item is { categoryId: string; _count: { _all: number }; _sum: { downloadCount: number | null; viewCount: number | null } } =>
+        typeof item.categoryId === 'string'
+      )
+      .sort((a, b) => b._count._all - a._count._all)
+      .slice(0, 10)
+      .map((item) => ({
+        categoryId: item.categoryId,
+        categoryName: humanNameMap[item.categoryId] || '未知数字人',
+        skillCount: item._count._all,
+        totalDownloads: item._sum.downloadCount || 0,
+        totalViews: item._sum.viewCount || 0,
+      }));
 
     const activeUsersSorted = activeUsersRaw
       .filter((item): item is { userId: string; _count: { _all: number } } =>
@@ -366,6 +403,14 @@ export async function GET(request: NextRequest) {
       return acc;
     }, {});
 
+    const topHumans = topHumansSorted.map((item) => ({
+      categoryId: item.categoryId,
+      categoryName: item.categoryId
+        ? humanNameMap[item.categoryId] || '未知数字人'
+        : '未知数字人',
+      count: item._count._all,
+    }));
+
     return NextResponse.json(
       successResponse({
         range: {
@@ -386,6 +431,7 @@ export async function GET(request: NextRequest) {
         site: {
           totalSkills,
           totalUsers,
+          totalHumans,
           totalDownloads: skillStats._sum.downloadCount || 0,
           totalViews: skillStats._sum.viewCount || 0,
         },
@@ -403,16 +449,12 @@ export async function GET(request: NextRequest) {
             module: item.module || 'unknown',
             count: item._count._all,
           })),
-        topCategories: topCategoriesSorted
-          .map((item) => ({
-            categoryId: item.categoryId,
-            categoryName: item.categoryId
-              ? categoryNameMap[item.categoryId] || '未知分类'
-              : '未知分类',
-            count: item._count._all,
-          })),
+        topHumans,
+        topCategories: topHumans,
         trends,
-        categoryTrends,
+        humanTrends,
+        categoryTrends: humanTrends,
+        humansBySkill,
         activeUsers: activeUsersSorted.map((item) => ({
           userId: item.userId,
           name: activeUserMap[item.userId]?.name || '未知用户',

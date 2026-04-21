@@ -8,8 +8,8 @@
 
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { message } from 'antd';
 import { useSession } from 'next-auth/react';
 import { SkillCategory } from '@/types';
@@ -22,8 +22,9 @@ import {
 
 type UploadSourceMode = 'link' | 'github-package';
 
-export default function UploadPage() {
+function UploadPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session, status } = useSession();
   const [loading, setLoading] = useState(false);
   const [sourceMode, setSourceMode] = useState<UploadSourceMode>('link');
@@ -41,6 +42,7 @@ export default function UploadPage() {
     description: '',
     tags: '',
   });
+  const preferredHuman = searchParams.get('humanId') || searchParams.get('categoryId') || '';
 
   useEffect(() => {
     let mounted = true;
@@ -61,26 +63,36 @@ export default function UploadPage() {
 
         if (mounted) {
           setCategories(items);
-          setFormData((prev) =>
-            !prev.categoryId && items.length > 0
-              ? { ...prev, categoryId: items[0].id }
-              : prev
-          );
+          const preferred = preferredHuman
+            ? items.find((item) => item.id === preferredHuman || item.slug === preferredHuman)
+            : null;
+          setFormData((prev) => {
+            if (prev.categoryId) return prev;
+            if (preferred) return { ...prev, categoryId: preferred.id };
+            return items.length > 0 ? { ...prev, categoryId: items[0].id } : prev;
+          });
         }
 
         if (serverItems.length === 0) {
-          console.warn('分类接口返回为空，已自动使用默认分类');
+          console.warn('数字人接口返回为空，已自动使用默认数字人');
         }
       } catch (error) {
-        console.error('加载分类失败:', error);
+        console.error('加载数字人失败:', error);
 
         if (mounted) {
           setCategories(fallbackCategories);
-          setFormData((prev) =>
-            !prev.categoryId && fallbackCategories.length > 0
+          const preferred = preferredHuman
+            ? fallbackCategories.find(
+                (item) => item.id === preferredHuman || item.slug === preferredHuman
+              )
+            : null;
+          setFormData((prev) => {
+            if (prev.categoryId) return prev;
+            if (preferred) return { ...prev, categoryId: preferred.id };
+            return fallbackCategories.length > 0
               ? { ...prev, categoryId: fallbackCategories[0].id }
-              : prev
-          );
+              : prev;
+          });
         }
       } finally {
         if (mounted) {
@@ -117,7 +129,7 @@ export default function UploadPage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [preferredHuman]);
 
   function triggerFilePicker() {
     if (loading) return;
@@ -148,7 +160,7 @@ export default function UploadPage() {
     }
 
     if (!formData.title || !formData.summary || !formData.description || !formData.categoryId) {
-      message.error('请完整填写标题、功能简介、分类和描述');
+      message.error('请完整填写标题、功能简介、所属数字人和描述');
       return;
     }
 
@@ -234,9 +246,9 @@ export default function UploadPage() {
       : summaryLength < 10
       ? '功能简介至少 10 个字'
       : categoriesLoading
-      ? '分类加载中，请稍候...'
+      ? '数字人加载中，请稍候...'
       : !formData.categoryId
-      ? '请先选择 Skill 类型'
+      ? '请先选择所属数字人'
       : !formData.description.trim()
       ? '请先填写描述'
       : sourceMode === 'link' && !normalizedExternalUrl
@@ -336,7 +348,7 @@ export default function UploadPage() {
               <div className="form-row-two">
                 <div className="form-group">
                   <label htmlFor="categoryId">
-                    Skill 类型 <span className="required">*</span>
+                    所属数字人 <span className="required">*</span>
                   </label>
                   <select
                     id="categoryId"
@@ -349,9 +361,9 @@ export default function UploadPage() {
                     required
                   >
                     {categoriesLoading ? (
-                      <option value="">加载分类中...</option>
+                      <option value="">加载数字人中...</option>
                     ) : categories.length === 0 ? (
-                      <option value="">暂无可用分类</option>
+                      <option value="">暂无可用数字人</option>
                     ) : (
                       categories.map((category) => (
                         <option key={category.id} value={category.id}>
@@ -535,7 +547,7 @@ export default function UploadPage() {
                 <strong>{sourceMode === 'link' ? '链接发布' : '文件上传发布'}</strong>
               </div>
               <div className="upload-panel-stat">
-                <span>当前分类</span>
+                <span>所属数字人</span>
                 <strong>{selectedCategoryName}</strong>
               </div>
               {sourceMode === 'link' ? (
@@ -577,6 +589,14 @@ export default function UploadPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+export default function UploadPage() {
+  return (
+    <Suspense fallback={<div className="loading-page">页面加载中...</div>}>
+      <UploadPageContent />
+    </Suspense>
   );
 }
 

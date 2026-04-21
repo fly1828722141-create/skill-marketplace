@@ -21,6 +21,9 @@ type SortOrder = 'asc' | 'desc';
 type IconKind = 'data' | 'content' | 'office' | 'dev' | 'image' | 'marketing' | 'generic';
 
 const CATEGORY_ICON: Record<string, { icon: IconKind; color: string }> = {
+  数据分析专家: { icon: 'data', color: 'blue' },
+  短视频专家: { icon: 'image', color: 'pink' },
+  编程开发专家: { icon: 'dev', color: 'orange' },
   数据分析与研究: { icon: 'data', color: 'blue' },
   '数据分析与 BI': { icon: 'data', color: 'blue' },
   内容写作与营销: { icon: 'content', color: 'purple' },
@@ -120,7 +123,7 @@ function SkillsContent() {
             : [];
         setCategories(serverCategories.length > 0 ? serverCategories : fallbackCategories);
       } catch (error) {
-        console.error('分类加载失败:', error);
+        console.error('数字人加载失败:', error);
         if (mounted) {
           setCategories(fallbackCategories);
         }
@@ -314,7 +317,7 @@ function SkillsContent() {
           value={categoryId}
           onChange={(event) => setCategoryId(event.target.value)}
         >
-          <option value={ALL_CATEGORY_ID}>全部分类</option>
+          <option value={ALL_CATEGORY_ID}>全部数字人</option>
           {categories.map((category) => (
             <option key={category.id} value={category.id}>
               {category.name}

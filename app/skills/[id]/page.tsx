@@ -305,12 +305,12 @@ export default function SkillDetailPage() {
                 {isExternalLinkSkill ? '🔗 外部链接' : `📦 ${formatFileSize(skill.fileSize)}`}
               </span>
               <span className="meta-item">🏷️ {(skill.fileType || 'link').toUpperCase()}</span>
-              <span className="meta-item">🗂️ {skill.category?.name || '未分类'}</span>
+              <span className="meta-item">🤖 {skill.category?.name || '未归属数字人'}</span>
             </div>
 
             <div className="skill-tags">
-              <span className="skill-type-label">Skill 类型</span>
-              <span className="tag">{skill.category?.name || '未分类'}</span>
+              <span className="skill-type-label">所属数字人</span>
+              <span className="tag">{skill.category?.name || '未归属数字人'}</span>
             </div>
           </div>
 
