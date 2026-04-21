@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "title": "alicode-pages-deploy（静态网址部署）",
+  "slug": "alicode-pages-deploy-静态网址部署-mo8bho24hk91",
+  "summary": "是一个用于部署静态网站到 AliCode Pages 的 skill。",
+  "tags": [],
+  "uploadedAt": "2026-04-21T07:43:35.692Z",
+  "uploader": {
+    "id": "d29b65bc-cf1d-4fd5-aee5-9bb0dfc25ae4",
+    "name": "Fly Fly",
+    "email": "fly1828722141@gmail.com"
+  },
+  "package": {
+    "fileName": "alicode-pages-deploy.skill.zip",
+    "extension": "zip",
+    "size": 3011,
+    "rawUrl": "https://raw.githubusercontent.com/fly1828722141-create/skill-marketplace/main/skills/alicode-pages-deploy-%E9%9D%99%E6%80%81%E7%BD%91%E5%9D%80%E9%83%A8%E7%BD%B2-mo8bho24hk91/alicode-pages-deploy.skill.zip"
+  }
+}
