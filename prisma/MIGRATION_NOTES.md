@@ -15,8 +15,8 @@
 3. Run:
 
 ```bash
-npx prisma generate
-npx prisma migrate deploy
+npm run db:generate
+npm run db:deploy
 ```
 
 4. Deploy application code.

@@ -59,15 +59,17 @@ npm run db:generate
 # 本地开发（SQLite）快速同步
 npm run db:push
 
-# 生产环境（PostgreSQL）开发迁移
+# 本地开发时创建迁移（PostgreSQL）
 npm run db:migrate
 
 # 生产部署执行迁移（推荐）
-npx prisma migrate deploy
+npm run db:deploy
 
 # 插入种子数据（可选）
 npm run db:seed
 ```
+
+> 说明：`npm run build` 只负责构建与 `Prisma Client` 生成，不会自动修改生产数据库结构。
 
 ### 4. 启动开发服务器
 

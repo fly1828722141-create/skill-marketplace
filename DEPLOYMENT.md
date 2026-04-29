@@ -40,15 +40,11 @@ npm install
 # 生成 Prisma 客户端
 npm run db:generate
 
-# 推送数据库结构
-npm run db:push
+# 生产环境执行迁移（推荐）
+npm run db:deploy
 ```
 
-或者使用迁移命令（推荐生产环境）：
-
-```bash
-npm run db:migrate
-```
+说明：生产环境避免使用 `db push`，通过显式迁移流程控制数据库变更。
 
 ### 3. 配置阿里云 OSS
 
