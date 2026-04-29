@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { message } from 'antd';
@@ -26,7 +26,6 @@ interface DashboardData {
   site: {
     totalSkills: number;
     totalUsers: number;
-    totalHumans: number;
     totalDownloads: number;
     totalViews: number;
   };
@@ -38,38 +37,18 @@ interface DashboardData {
     module: string;
     count: number;
   }>;
-  topHumans?: Array<{
+  topCategories: Array<{
     categoryId: string | null;
     categoryName: string;
     count: number;
   }>;
-  topCategories?: Array<{
-    categoryId: string | null;
-    categoryName: string;
-    count: number;
-  }>;
-  humanTrends?: Array<{
+  categoryTrends: Array<{
     categoryId: string;
     categoryName: string;
     points: Array<{
       date: string;
       count: number;
     }>;
-  }>;
-  categoryTrends?: Array<{
-    categoryId: string;
-    categoryName: string;
-    points: Array<{
-      date: string;
-      count: number;
-    }>;
-  }>;
-  humansBySkill?: Array<{
-    categoryId: string;
-    categoryName: string;
-    skillCount: number;
-    totalDownloads: number;
-    totalViews: number;
   }>;
   activeUsers: Array<{
     userId: string;
@@ -90,7 +69,6 @@ interface DashboardData {
     viewCount: number;
     category?: {
       id: string;
-      slug?: string;
       name: string;
     } | null;
   }>;
@@ -103,7 +81,7 @@ const EVENT_NAME_LABELS: Record<string, string> = {
   skill_upload_success: '技能上传成功',
   skill_download_click: '技能下载点击',
   skill_search: '技能搜索',
-  category_click: '数字人点击',
+  category_click: '分类点击',
   review_submit_success: '评价提交成功',
   review_like_toggle: '评价点赞切换',
 };
@@ -116,7 +94,6 @@ const MODULE_LABELS: Record<string, string> = {
   auth: '登录模块',
   'skills-page': '技能列表页',
   'skill-detail': '技能详情页',
-  'human-workspace': '数字人工作台',
   dashboard: '数据看板',
   unknown: '未知模块',
 };
@@ -188,21 +165,6 @@ export default function DashboardPage() {
     }
   }, [isDashboardOwner, router, session?.user, status]);
 
-  const topHumans = useMemo(() => {
-    if (!data) return [];
-    return data.topHumans || data.topCategories || [];
-  }, [data]);
-
-  const humanTrends = useMemo(() => {
-    if (!data) return [];
-    return data.humanTrends || data.categoryTrends || [];
-  }, [data]);
-
-  const humansBySkill = useMemo(() => {
-    if (!data) return [];
-    return data.humansBySkill || [];
-  }, [data]);
-
   if (status === 'loading') {
     return <div className="loading-page">加载中...</div>;
   }
@@ -250,7 +212,6 @@ export default function DashboardPage() {
           <div className="dashboard-grid">
             <StatCard title="总技能数" value={data.site.totalSkills} />
             <StatCard title="总用户数" value={data.site.totalUsers} />
-            <StatCard title="总数字人数" value={data.site.totalHumans || 0} />
             <StatCard title="累计下载" value={data.site.totalDownloads} />
             <StatCard title="累计浏览" value={data.site.totalViews} />
           </div>
@@ -278,41 +239,13 @@ export default function DashboardPage() {
           </section>
 
           <section className="dashboard-card">
-            <h3>数字人点击 前10</h3>
+            <h3>分类点击 前10</h3>
             <SimpleTable
-              headers={['数字人', '次数']}
-              rows={topHumans.map((item) => [item.categoryName, formatNumber(item.count)])}
-            />
-          </section>
-
-          <section className="dashboard-card">
-            <h3>数字人技能规模 前10</h3>
-            <SimpleTable
-              headers={['数字人', 'Skill 数', '下载', '浏览']}
-              rows={humansBySkill.map((item) => [
+              headers={['分类', '次数']}
+              rows={data.topCategories.map((item) => [
                 item.categoryName,
-                formatNumber(item.skillCount),
-                formatNumber(item.totalDownloads),
-                formatNumber(item.totalViews),
+                formatNumber(item.count),
               ])}
-            />
-          </section>
-
-          <section className="dashboard-card">
-            <h3>数字人趋势 前5</h3>
-            <SimpleTable
-              headers={['数字人', '窗口总点击', '近 7 天']}
-              rows={humanTrends.map((item) => {
-                const total = item.points.reduce((sum, point) => sum + point.count, 0);
-                const last7 = item.points
-                  .slice(-7)
-                  .reduce((sum, point) => sum + point.count, 0);
-                return [
-                  item.categoryName,
-                  formatNumber(total),
-                  formatNumber(last7),
-                ];
-              })}
             />
           </section>
 
@@ -329,12 +262,30 @@ export default function DashboardPage() {
           </section>
 
           <section className="dashboard-card">
+            <h3>分类趋势 前5</h3>
+            <SimpleTable
+              headers={['分类', '窗口总点击', '近 7 天']}
+              rows={data.categoryTrends.map((item) => {
+                const total = item.points.reduce((sum, point) => sum + point.count, 0);
+                const last7 = item.points
+                  .slice(-7)
+                  .reduce((sum, point) => sum + point.count, 0);
+                return [
+                  item.categoryName,
+                  formatNumber(total),
+                  formatNumber(last7),
+                ];
+              })}
+            />
+          </section>
+
+          <section className="dashboard-card">
             <h3>下载榜单 前5</h3>
             <SimpleTable
-              headers={['技能名称', '数字人', '下载', '浏览']}
+              headers={['技能名称', '分类', '下载', '浏览']}
               rows={data.topSkills.map((item) => [
                 item.title,
-                item.category?.name || '未归属数字人',
+                item.category?.name || '未分类',
                 formatNumber(item.downloadCount),
                 formatNumber(item.viewCount),
               ])}

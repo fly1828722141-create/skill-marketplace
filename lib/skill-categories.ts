@@ -1,10 +1,5 @@
 import prisma from '@/lib/prisma';
 import { DEFAULT_SKILL_CATEGORIES_PRESET } from '@/lib/category-presets';
-import {
-  CORE_DIGITAL_HUMAN_SLUG_SET,
-  DEFAULT_DIGITAL_HUMAN_SLUG,
-  DIGITAL_HUMAN_MIGRATION_EVENT,
-} from '@/lib/digital-humans';
 
 export type DefaultSkillCategory = (typeof DEFAULT_SKILL_CATEGORIES_PRESET)[number];
 export const DEFAULT_SKILL_CATEGORIES = DEFAULT_SKILL_CATEGORIES_PRESET;
@@ -56,111 +51,61 @@ export async function ensureDefaultCategories() {
     })
   );
 
-  const defaultCategory = syncedCategories.find(
-    (item) => item.slug === DEFAULT_DIGITAL_HUMAN_SLUG
-  );
-  if (!defaultCategory) {
+  const defaultSlugSet = new Set(DEFAULT_SKILL_CATEGORIES.map((item) => item.slug));
+  const otherCategory = syncedCategories.find((item) => item.slug === 'others');
+
+  const legacyCategories = await prisma.skillCategory.findMany({
+    where: {
+      status: 'active',
+      slug: {
+        notIn: [...defaultSlugSet],
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (legacyCategories.length === 0 || !otherCategory) {
     return;
   }
 
   try {
-    const migrated = await prisma.eventLog.findFirst({
-      where: { eventName: DIGITAL_HUMAN_MIGRATION_EVENT },
-      select: { id: true },
-    });
-    if (migrated) return;
-
-    const coreCategoryIds = syncedCategories.map((item) => item.id);
-    const legacyCategories = await prisma.skillCategory.findMany({
-      where: {
-        id: {
-          notIn: coreCategoryIds,
-        },
-      },
-      select: {
-        id: true,
-        slug: true,
-      },
-    });
     const legacyCategoryIds = legacyCategories.map((item) => item.id);
 
-    const [legacySkillMigration, uncategorizedSkillMigration, legacyEventMigration] =
-      await prisma.$transaction(async (tx) => {
-        const updates = await Promise.all([
-          legacyCategoryIds.length > 0
-            ? tx.skill.updateMany({
-                where: {
-                  categoryId: {
-                    in: legacyCategoryIds,
-                  },
-                },
-                data: {
-                  categoryId: defaultCategory.id,
-                },
-              })
-            : Promise.resolve({ count: 0 }),
-          tx.skill.updateMany({
-            where: {
-              categoryId: null,
-            },
-            data: {
-              categoryId: defaultCategory.id,
-            },
-          }),
-          legacyCategoryIds.length > 0
-            ? tx.eventLog.updateMany({
-                where: {
-                  categoryId: {
-                    in: legacyCategoryIds,
-                  },
-                },
-                data: {
-                  categoryId: defaultCategory.id,
-                },
-              })
-            : Promise.resolve({ count: 0 }),
-        ]);
+    await prisma.skill.updateMany({
+      where: {
+        categoryId: {
+          in: legacyCategoryIds,
+        },
+      },
+      data: {
+        categoryId: otherCategory.id,
+      },
+    });
 
-        if (legacyCategoryIds.length > 0) {
-          await tx.skillCategory.updateMany({
-            where: {
-              id: {
-                in: legacyCategoryIds,
-              },
-            },
-            data: {
-              status: 'inactive',
-            },
-          });
-        }
+    await prisma.eventLog.updateMany({
+      where: {
+        categoryId: {
+          in: legacyCategoryIds,
+        },
+      },
+      data: {
+        categoryId: otherCategory.id,
+      },
+    });
 
-        await tx.eventLog.create({
-          data: {
-            eventName: DIGITAL_HUMAN_MIGRATION_EVENT,
-            page: '/api/categories',
-            module: 'category-system',
-            action: 'legacy_to_default_human',
-            categoryId: defaultCategory.id,
-            metadata: {
-              defaultHumanSlug: DEFAULT_DIGITAL_HUMAN_SLUG,
-              coreHumanSlugs: [...CORE_DIGITAL_HUMAN_SLUG_SET],
-              migratedLegacyCategoryCount: legacyCategoryIds.length,
-              migratedSkillCount:
-                updates[0].count + updates[1].count,
-              migratedEventLogCount: updates[2].count,
-            },
-          },
-        });
-
-        return updates;
-      });
-
-    if (legacySkillMigration.count > 0 || uncategorizedSkillMigration.count > 0) {
-      console.info(
-        `数字人迁移完成：legacy=${legacySkillMigration.count}, uncategorized=${uncategorizedSkillMigration.count}, events=${legacyEventMigration.count}`
-      );
-    }
+    await prisma.skillCategory.updateMany({
+      where: {
+        id: {
+          in: legacyCategoryIds,
+        },
+      },
+      data: {
+        status: 'inactive',
+      },
+    });
   } catch (error) {
-    console.error('数字人迁移失败，但不影响分类查询:', error);
+    console.error('归并历史分类失败，但不影响分类查询:', error);
   }
 }
