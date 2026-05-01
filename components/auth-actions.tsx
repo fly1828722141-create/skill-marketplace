@@ -12,14 +12,22 @@ export default function AuthActions() {
 
   if (!session?.user) {
     return (
-      <Link href="/login" className="upload-btn">
-        Google 登录
-      </Link>
+      <div className="auth-actions">
+        <Link href="/feedback" className="wish-nav-btn">
+          我要许愿
+        </Link>
+        <Link href="/login" className="upload-btn">
+          Google 登录
+        </Link>
+      </div>
     );
   }
 
   return (
     <div className="auth-actions">
+      <Link href="/feedback" className="wish-nav-btn">
+        我要许愿
+      </Link>
       <Link href="/upload" className="upload-btn">
         + 上传 Skill
       </Link>

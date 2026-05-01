@@ -192,6 +192,7 @@ model FeedbackThread {
   title         String
   content       String    @db.Text
   status        String    @default("open") // open, closed
+  isPinned      Boolean   @default(false)
   upvoteCount   Int       @default(0)
   downvoteCount Int       @default(0)
   replyCount    Int       @default(0)
@@ -206,6 +207,7 @@ model FeedbackThread {
   votes         FeedbackVote[]
 
   @@index([createdAt])
+  @@index([isPinned, createdAt])
   @@index([upvoteCount, createdAt])
   @@index([userId, createdAt])
   @@index([pinnedReplyId])

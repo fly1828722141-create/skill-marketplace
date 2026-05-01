@@ -30,13 +30,28 @@ export async function GET(request: NextRequest) {
     const currentUser = await getCurrentUser();
     const sort = normalizeSort(request.nextUrl.searchParams.get('sort'));
     const pageSize = clampPageSize(request.nextUrl.searchParams.get('pageSize'));
+    const mineOnly = request.nextUrl.searchParams.get('mine') === '1';
+
+    if (mineOnly && !currentUser?.id) {
+      return NextResponse.json(successResponse({ items: [] }));
+    }
 
     const threads = await prisma.feedbackThread.findMany({
+      where: mineOnly
+        ? {
+            userId: currentUser!.id,
+          }
+        : undefined,
       take: pageSize,
       orderBy:
         sort === 'hot'
-          ? [{ upvoteCount: 'desc' }, { replyCount: 'desc' }, { createdAt: 'desc' }]
-          : [{ createdAt: 'desc' }],
+          ? [
+              { isPinned: 'desc' },
+              { upvoteCount: 'desc' },
+              { replyCount: 'desc' },
+              { createdAt: 'desc' },
+            ]
+          : [{ isPinned: 'desc' }, { createdAt: 'desc' }],
       include: {
         user: {
           select: {
@@ -123,6 +138,7 @@ export async function GET(request: NextRequest) {
           title: thread.title,
           content: thread.content,
           status: thread.status,
+          isPinned: thread.isPinned,
           upvoteCount: thread.upvoteCount,
           downvoteCount: thread.downvoteCount,
           replyCount: thread.replyCount,
@@ -133,6 +149,7 @@ export async function GET(request: NextRequest) {
           canManage:
             Boolean(currentUser?.id) &&
             (currentUser?.id === thread.userId || isSuperAdminEmail(currentUser?.email)),
+          canAdminManage: isSuperAdminEmail(currentUser?.email),
           canDelete: isSuperAdminEmail(currentUser?.email),
           user: thread.user,
           replies: thread.replies.map((reply) => ({
@@ -226,8 +243,10 @@ export async function POST(request: NextRequest) {
       successResponse(
         {
           ...thread,
+          isPinned: thread.isPinned,
           userVote: 0,
           canManage: true,
+          canAdminManage: isSuperAdminEmail(currentUser?.email),
           canDelete: isSuperAdminEmail(currentUser?.email),
           replies: [],
         },

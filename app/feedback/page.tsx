@@ -38,6 +38,7 @@ interface FeedbackThread {
   title: string;
   content: string;
   status: string;
+  isPinned: boolean;
   upvoteCount: number;
   downvoteCount: number;
   replyCount: number;
@@ -45,12 +46,17 @@ interface FeedbackThread {
   userVote: number;
   canManage?: boolean;
   canDelete?: boolean;
+  canAdminManage?: boolean;
   createdAt: string;
+  updatedAt?: string;
   user: FeedbackUser;
   replies: FeedbackReply[];
 }
 
-type SortMode = 'new' | 'hot';
+type ViewMode = 'wish' | 'mine';
+
+const THREAD_TITLE_MAX = 120;
+const THREAD_CONTENT_MAX = 5000;
 
 export default function FeedbackPage() {
   const router = useRouter();
@@ -60,57 +66,67 @@ export default function FeedbackPage() {
   const [postingThread, setPostingThread] = useState(false);
   const [threadTitle, setThreadTitle] = useState('');
   const [threadContent, setThreadContent] = useState('');
-  const [sortMode, setSortMode] = useState<SortMode>('new');
+  const [viewMode, setViewMode] = useState<ViewMode>('wish');
   const [replySubmittingMap, setReplySubmittingMap] = useState<Record<string, boolean>>({});
   const [replyDraftMap, setReplyDraftMap] = useState<Record<string, string>>({});
   const [replyTargetMap, setReplyTargetMap] = useState<
     Record<string, { id: string; name: string } | null>
   >({});
-  const [pinningMap, setPinningMap] = useState<Record<string, boolean>>({});
+  const [pinningReplyMap, setPinningReplyMap] = useState<Record<string, boolean>>({});
+  const [pinningThreadMap, setPinningThreadMap] = useState<Record<string, boolean>>({});
   const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
+  const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
+  const [editingContent, setEditingContent] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
 
   async function fetchThreads() {
+    if (viewMode === 'mine' && !session?.user?.id) {
+      setThreads([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
-      const response = await fetch(`/api/feedback/threads?sort=${sortMode}&pageSize=30`, {
+      const mine = viewMode === 'mine' ? 1 : 0;
+      const response = await fetch(`/api/feedback/threads?sort=new&pageSize=30&mine=${mine}`, {
         cache: 'no-store',
       });
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || '加载反馈区失败');
+        throw new Error(result.error || '加载许愿列表失败');
       }
 
       setThreads(result.data?.items || []);
     } catch (error: any) {
-      console.error('加载反馈区失败:', error);
-      message.error(error.message || '加载反馈区失败');
+      console.error('加载许愿区失败:', error);
+      message.error(error.message || '加载许愿区失败');
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    fetchThreads();
-    const timer = setInterval(fetchThreads, 20000);
+    void fetchThreads();
+    const timer = setInterval(() => {
+      void fetchThreads();
+    }, 20000);
     return () => clearInterval(timer);
-  }, [sortMode]);
+  }, [viewMode, session?.user?.id]);
 
   const sortedThreads = useMemo(() => {
-    const cloned = [...threads];
-    if (sortMode === 'hot') {
-      return cloned.sort((a, b) => {
-        const scoreA = a.upvoteCount - a.downvoteCount + a.replyCount * 0.3;
-        const scoreB = b.upvoteCount - b.downvoteCount + b.replyCount * 0.3;
-        if (scoreB !== scoreA) return scoreB - scoreA;
-        return +new Date(b.createdAt) - +new Date(a.createdAt);
-      });
-    }
+    return [...threads].sort((a, b) => {
+      const pinnedA = a.isPinned ? 1 : 0;
+      const pinnedB = b.isPinned ? 1 : 0;
+      if (pinnedB !== pinnedA) {
+        return pinnedB - pinnedA;
+      }
 
-    return cloned.sort(
-      (a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)
-    );
-  }, [threads, sortMode]);
+      return +new Date(b.createdAt) - +new Date(a.createdAt);
+    });
+  }, [threads]);
 
   const isAdmin = isSuperAdminEmail(session?.user?.email);
 
@@ -124,6 +140,13 @@ export default function FeedbackPage() {
   function canDeleteThread(thread: FeedbackThread) {
     if (typeof thread.canDelete === 'boolean') {
       return thread.canDelete;
+    }
+    return isAdmin;
+  }
+
+  function canAdminManageThread(thread: FeedbackThread) {
+    if (typeof thread.canAdminManage === 'boolean') {
+      return thread.canAdminManage;
     }
     return isAdmin;
   }
@@ -147,10 +170,22 @@ export default function FeedbackPage() {
     return false;
   }
 
+  function startEditThread(thread: FeedbackThread) {
+    setEditingThreadId(thread.id);
+    setEditingTitle(thread.title || '');
+    setEditingContent(thread.content || '');
+  }
+
+  function cancelEditThread() {
+    setEditingThreadId(null);
+    setEditingTitle('');
+    setEditingContent('');
+  }
+
   async function handleCreateThread(event: React.FormEvent) {
     event.preventDefault();
 
-    if (!(await ensureLogin('发帖'))) return;
+    if (!(await ensureLogin('发布许愿'))) return;
 
     const title = threadTitle.trim();
     const content = threadContent.trim();
@@ -159,8 +194,9 @@ export default function FeedbackPage() {
       message.warning('标题至少 4 个字');
       return;
     }
+
     if (!content) {
-      message.warning('请填写反馈内容');
+      message.warning('请填写许愿内容');
       return;
     }
 
@@ -179,23 +215,119 @@ export default function FeedbackPage() {
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || '发帖失败');
+        throw new Error(result.error || '发布许愿失败');
       }
 
       setThreadTitle('');
       setThreadContent('');
       setThreads((prev) => [result.data, ...prev]);
-      message.success('发帖成功');
+      message.success('许愿发布成功');
     } catch (error: any) {
-      console.error('发帖失败:', error);
-      message.error(error.message || '发帖失败');
+      console.error('发布许愿失败:', error);
+      message.error(error.message || '发布许愿失败');
     } finally {
       setPostingThread(false);
     }
   }
 
+  async function handleSaveThreadEdit(threadId: string) {
+    if (!(await ensureLogin('修改帖子'))) return;
+
+    const title = editingTitle.trim();
+    const content = editingContent.trim();
+
+    if (title.length < 4 || title.length > THREAD_TITLE_MAX) {
+      message.warning(`标题长度需在 4-${THREAD_TITLE_MAX} 字之间`);
+      return;
+    }
+
+    if (!content || content.length > THREAD_CONTENT_MAX) {
+      message.warning(`正文不能为空且不能超过 ${THREAD_CONTENT_MAX} 字`);
+      return;
+    }
+
+    try {
+      setSavingEdit(true);
+      const response = await fetch(`/api/feedback/threads/${threadId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title,
+          content,
+        }),
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '修改帖子失败');
+      }
+
+      setThreads((prev) =>
+        prev.map((thread) =>
+          thread.id === threadId
+            ? {
+                ...thread,
+                title: result.data?.title || title,
+                content: result.data?.content || content,
+                updatedAt: result.data?.updatedAt || thread.updatedAt,
+              }
+            : thread
+        )
+      );
+      cancelEditThread();
+      message.success('帖子已修改');
+    } catch (error: any) {
+      console.error('修改帖子失败:', error);
+      message.error(error.message || '修改帖子失败');
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function handleToggleThreadPin(threadId: string, currentPinned: boolean) {
+    if (!(await ensureLogin('置顶帖子'))) return;
+
+    try {
+      setPinningThreadMap((prev) => ({ ...prev, [threadId]: true }));
+      const response = await fetch(`/api/feedback/threads/${threadId}/pin-thread`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          pinned: !currentPinned,
+        }),
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '帖子置顶失败');
+      }
+
+      const nextPinned = Boolean(result.data?.isPinned);
+      setThreads((prev) =>
+        prev.map((thread) =>
+          thread.id === threadId
+            ? {
+                ...thread,
+                isPinned: nextPinned,
+              }
+            : thread
+        )
+      );
+      message.success(nextPinned ? '帖子已置顶' : '已取消置顶');
+    } catch (error: any) {
+      console.error('置顶帖子失败:', error);
+      message.error(error.message || '置顶帖子失败');
+    } finally {
+      setPinningThreadMap((prev) => ({ ...prev, [threadId]: false }));
+    }
+  }
+
   async function handleThreadVote(threadId: string, value: 1 | -1) {
-    if (!(await ensureLogin('投票'))) return;
+    if (!(await ensureLogin('点赞'))) return;
 
     try {
       const response = await fetch(`/api/feedback/threads/${threadId}/vote`, {
@@ -208,7 +340,7 @@ export default function FeedbackPage() {
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || '投票失败');
+        throw new Error(result.error || '点赞失败');
       }
 
       setThreads((prev) =>
@@ -225,12 +357,12 @@ export default function FeedbackPage() {
       );
     } catch (error: any) {
       console.error('帖子投票失败:', error);
-      message.error(error.message || '投票失败');
+      message.error(error.message || '点赞失败');
     }
   }
 
   async function handleReplyVote(threadId: string, replyId: string, value: 1 | -1) {
-    if (!(await ensureLogin('投票'))) return;
+    if (!(await ensureLogin('点赞'))) return;
 
     try {
       const response = await fetch(`/api/feedback/replies/${replyId}/vote`, {
@@ -243,7 +375,7 @@ export default function FeedbackPage() {
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || '投票失败');
+        throw new Error(result.error || '点赞失败');
       }
 
       setThreads((prev) =>
@@ -266,7 +398,7 @@ export default function FeedbackPage() {
       );
     } catch (error: any) {
       console.error('回复投票失败:', error);
-      message.error(error.message || '投票失败');
+      message.error(error.message || '点赞失败');
     }
   }
 
@@ -327,7 +459,7 @@ export default function FeedbackPage() {
     if (!(await ensureLogin('置顶回复'))) return;
 
     try {
-      setPinningMap((prev) => ({ ...prev, [threadId]: true }));
+      setPinningReplyMap((prev) => ({ ...prev, [threadId]: true }));
       const response = await fetch(`/api/feedback/threads/${threadId}/pin`, {
         method: 'POST',
         headers: {
@@ -340,7 +472,7 @@ export default function FeedbackPage() {
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || '置顶失败');
+        throw new Error(result.error || '置顶回复失败');
       }
 
       const pinnedReplyId = result.data?.pinnedReplyId || null;
@@ -357,16 +489,16 @@ export default function FeedbackPage() {
       message.success(pinnedReplyId ? '已置顶该回复' : '已取消置顶');
     } catch (error: any) {
       console.error('置顶回复失败:', error);
-      message.error(error.message || '置顶失败');
+      message.error(error.message || '置顶回复失败');
     } finally {
-      setPinningMap((prev) => ({ ...prev, [threadId]: false }));
+      setPinningReplyMap((prev) => ({ ...prev, [threadId]: false }));
     }
   }
 
-  async function handleDeleteThread(threadId: string, threadTitle: string) {
+  async function handleDeleteThread(threadId: string, title: string) {
     if (!(await ensureLogin('删帖'))) return;
 
-    if (!window.confirm(`确认删除帖子「${threadTitle}」吗？此操作不可撤销。`)) {
+    if (!window.confirm(`确认删除帖子「${title}」吗？此操作不可撤销。`)) {
       return;
     }
 
@@ -391,67 +523,89 @@ export default function FeedbackPage() {
     }
   }
 
+  const showMineLoginHint = viewMode === 'mine' && !session?.user;
+
   return (
     <div className="feedback-page">
       <section className="feedback-hero">
-        <h1>意见反馈社区</h1>
-        <p>公开透明讨论区：支持发帖、点赞、点踩、回复讨论，大家一起把产品做得更好。</p>
-      </section>
-
-      <section className="feedback-card">
-        <div className="feedback-card-head">
-          <h2>发新帖</h2>
-          <span>公平机制：赞和踩都会被统计</span>
+        <h1>技能许愿池</h1>
+        <p>发布你想要的 Skill，社区可跟帖回复与点赞，管理员可对帖子进行置顶、修改和删除。</p>
+        <div className="feedback-hero-meta">
+          <span>排序规则：按许愿日期降序</span>
+          <span>互动方式：跟帖回复 + 点赞</span>
         </div>
-        <form className="feedback-thread-form" onSubmit={handleCreateThread}>
-          <input
-            className="input"
-            placeholder="帖子标题（4~120字）"
-            maxLength={120}
-            value={threadTitle}
-            onChange={(event) => setThreadTitle(event.target.value)}
-          />
-          <textarea
-            className="input textarea"
-            rows={4}
-            placeholder="详细描述你的问题、建议或想法..."
-            maxLength={5000}
-            value={threadContent}
-            onChange={(event) => setThreadContent(event.target.value)}
-          />
-          <div className="feedback-thread-actions">
-            <button type="submit" className="btn btn-primary" disabled={postingThread}>
-              {postingThread ? '发布中...' : '发布帖子'}
-            </button>
-          </div>
-        </form>
       </section>
+
+      <section className="feedback-mode-tabs" aria-label="许愿视图切换">
+        <button
+          type="button"
+          className={`feedback-mode-tab ${viewMode === 'wish' ? 'active' : ''}`}
+          onClick={() => setViewMode('wish')}
+        >
+          我要许愿
+        </button>
+        <button
+          type="button"
+          className={`feedback-mode-tab ${viewMode === 'mine' ? 'active' : ''}`}
+          onClick={() => setViewMode('mine')}
+        >
+          我的许愿
+        </button>
+      </section>
+
+      {viewMode === 'wish' ? (
+        <section className="feedback-card">
+          <div className="feedback-card-head">
+            <h2>发布新许愿</h2>
+            <span>请描述你希望社区补充的 Skill 场景</span>
+          </div>
+          <form className="feedback-thread-form" onSubmit={handleCreateThread}>
+            <input
+              className="input"
+              placeholder="许愿标题（4~120字）"
+              maxLength={THREAD_TITLE_MAX}
+              value={threadTitle}
+              onChange={(event) => setThreadTitle(event.target.value)}
+            />
+            <textarea
+              className="input textarea"
+              rows={8}
+              placeholder="详细说明你的需求、使用场景、期望产出..."
+              maxLength={THREAD_CONTENT_MAX}
+              value={threadContent}
+              onChange={(event) => setThreadContent(event.target.value)}
+            />
+            <div className="feedback-thread-actions">
+              <button type="submit" className="btn btn-primary" disabled={postingThread}>
+                {postingThread ? '发布中...' : '发布许愿'}
+              </button>
+            </div>
+          </form>
+        </section>
+      ) : (
+        <section className="feedback-card">
+          <div className="feedback-card-head">
+            <h2>我的许愿</h2>
+            <span>只展示你发布的帖子</span>
+          </div>
+          {showMineLoginHint ? (
+            <div className="empty-state">请先登录后查看“我的许愿”。</div>
+          ) : null}
+        </section>
+      )}
 
       <section className="feedback-card">
         <div className="feedback-card-head">
-          <h2>讨论列表</h2>
-          <div className="feedback-sort">
-            <button
-              type="button"
-              className={`feedback-sort-btn ${sortMode === 'new' ? 'active' : ''}`}
-              onClick={() => setSortMode('new')}
-            >
-              最新
-            </button>
-            <button
-              type="button"
-              className={`feedback-sort-btn ${sortMode === 'hot' ? 'active' : ''}`}
-              onClick={() => setSortMode('hot')}
-            >
-              最热
-            </button>
-          </div>
+          <h2>{viewMode === 'wish' ? '最新许愿' : '我的许愿列表'}</h2>
+          <span>置顶帖子优先，其余按许愿日期降序</span>
         </div>
 
         {loading ? (
-          <div className="loading-page">反馈区加载中...</div>
+          <div className="loading-page">许愿区加载中...</div>
+        ) : showMineLoginHint ? (
+          <div className="empty-state">登录后可查看和管理你的许愿帖。</div>
         ) : sortedThreads.length === 0 ? (
-          <div className="empty-state">还没有帖子，来发第一条建议吧</div>
+          <div className="empty-state">暂时没有许愿帖，来发布第一条吧</div>
         ) : (
           <div className="feedback-thread-list">
             {sortedThreads.map((thread) => {
@@ -461,13 +615,21 @@ export default function FeedbackPage() {
               const orderedReplies = getSortedReplies(thread);
               const canManage = canManageThread(thread);
               const canDelete = canDeleteThread(thread);
-              const pinning = Boolean(pinningMap[thread.id]);
+              const canAdminManage = canAdminManageThread(thread);
+              const pinningReply = Boolean(pinningReplyMap[thread.id]);
+              const pinningThread = Boolean(pinningThreadMap[thread.id]);
+              const isEditing = editingThreadId === thread.id;
 
               return (
                 <article key={thread.id} className="feedback-thread-item">
                   <header className="feedback-thread-header">
                     <div>
-                      <h3>{thread.title}</h3>
+                      <h3>
+                        {thread.title}
+                        {thread.isPinned ? (
+                          <span className="feedback-thread-pinned-tag">管理员置顶</span>
+                        ) : null}
+                      </h3>
                       <div className="feedback-thread-meta">
                         <span>{thread.user?.name || '匿名用户'}</span>
                         <span>·</span>
@@ -478,22 +640,83 @@ export default function FeedbackPage() {
                       <div className="feedback-thread-score">
                         热度 {formatNumber(thread.upvoteCount - thread.downvoteCount)}
                       </div>
-                      {canDelete ? (
-                        <button
-                          type="button"
-                          className="feedback-delete-btn"
-                          disabled={deletingThreadId === thread.id}
-                          onClick={() =>
-                            void handleDeleteThread(thread.id, thread.title)
-                          }
-                        >
-                          {deletingThreadId === thread.id ? '删除中...' : '管理员删帖'}
-                        </button>
+                      {canAdminManage ? (
+                        <div className="feedback-admin-actions">
+                          <button
+                            type="button"
+                            className={`feedback-pin-btn ${thread.isPinned ? 'active' : ''}`}
+                            disabled={pinningThread}
+                            onClick={() =>
+                              void handleToggleThreadPin(thread.id, Boolean(thread.isPinned))
+                            }
+                          >
+                            {pinningThread
+                              ? '处理中...'
+                              : thread.isPinned
+                              ? '取消置顶帖子'
+                              : '置顶帖子'}
+                          </button>
+                          <button
+                            type="button"
+                            className="feedback-edit-btn"
+                            onClick={() => startEditThread(thread)}
+                          >
+                            管理员修改
+                          </button>
+                          {canDelete ? (
+                            <button
+                              type="button"
+                              className="feedback-delete-btn"
+                              disabled={deletingThreadId === thread.id}
+                              onClick={() => void handleDeleteThread(thread.id, thread.title)}
+                            >
+                              {deletingThreadId === thread.id ? '删除中...' : '管理员删帖'}
+                            </button>
+                          ) : null}
+                        </div>
                       ) : null}
                     </div>
                   </header>
 
-                  <p className="feedback-thread-content">{thread.content}</p>
+                  {isEditing ? (
+                    <div className="feedback-edit-form">
+                      <input
+                        className="input"
+                        maxLength={THREAD_TITLE_MAX}
+                        value={editingTitle}
+                        onChange={(event) => setEditingTitle(event.target.value)}
+                        placeholder="请输入新的帖子标题"
+                      />
+                      <textarea
+                        className="input textarea"
+                        rows={5}
+                        maxLength={THREAD_CONTENT_MAX}
+                        value={editingContent}
+                        onChange={(event) => setEditingContent(event.target.value)}
+                        placeholder="请输入新的帖子正文"
+                      />
+                      <div className="feedback-thread-actions feedback-edit-actions">
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          disabled={savingEdit}
+                          onClick={() => void handleSaveThreadEdit(thread.id)}
+                        >
+                          {savingEdit ? '保存中...' : '保存修改'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          disabled={savingEdit}
+                          onClick={cancelEditThread}
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="feedback-thread-content">{thread.content}</p>
+                  )}
 
                   <div className="feedback-vote-row">
                     <button
@@ -573,9 +796,7 @@ export default function FeedbackPage() {
                                 className={`feedback-vote-btn small ${
                                   reply.userVote === 1 ? 'active-up' : ''
                                 }`}
-                                onClick={() =>
-                                  void handleReplyVote(thread.id, reply.id, 1)
-                                }
+                                onClick={() => void handleReplyVote(thread.id, reply.id, 1)}
                               >
                                 👍 {formatNumber(reply.upvoteCount)}
                               </button>
@@ -584,9 +805,7 @@ export default function FeedbackPage() {
                                 className={`feedback-vote-btn small ${
                                   reply.userVote === -1 ? 'active-down' : ''
                                 }`}
-                                onClick={() =>
-                                  void handleReplyVote(thread.id, reply.id, -1)
-                                }
+                                onClick={() => void handleReplyVote(thread.id, reply.id, -1)}
                               >
                                 👎 {formatNumber(reply.downvoteCount)}
                               </button>
@@ -596,12 +815,10 @@ export default function FeedbackPage() {
                                   className={`feedback-pin-btn ${
                                     thread.pinnedReplyId === reply.id ? 'active' : ''
                                   }`}
-                                  disabled={pinning}
-                                  onClick={() =>
-                                    void handlePinReply(thread.id, reply.id)
-                                  }
+                                  disabled={pinningReply}
+                                  onClick={() => void handlePinReply(thread.id, reply.id)}
                                 >
-                                  {pinning && thread.pinnedReplyId === reply.id
+                                  {pinningReply && thread.pinnedReplyId === reply.id
                                     ? '处理中...'
                                     : thread.pinnedReplyId === reply.id
                                     ? '取消置顶'
