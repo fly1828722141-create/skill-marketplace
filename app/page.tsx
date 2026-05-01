@@ -9,8 +9,8 @@ import { getSkillIconStyle } from '@/lib/skill-icon-style';
 import { formatNumber } from '@/lib/utils';
 
 const ALL_CATEGORY_ID = 'all';
-const HOME_SKILLS_CACHE_KEY = 'skill_marketplace_home_skills_v1';
-const HOME_OVERVIEW_CACHE_KEY = 'skill_marketplace_home_overview_v1';
+const HOME_SKILLS_CACHE_KEY = 'skill_marketplace_home_skills_v2';
+const HOME_OVERVIEW_CACHE_KEY = 'skill_marketplace_home_overview_v2';
 const HOME_SHOWCASE_LIMIT = 3;
 const LEADERBOARD_LIMIT = 10;
 

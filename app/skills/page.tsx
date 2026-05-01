@@ -13,7 +13,7 @@ import { canManageSkill, isSuperAdminEmail } from '@/lib/dashboard-access';
 import { formatFileSize, formatNumber, formatTime } from '@/lib/utils';
 
 const ALL_CATEGORY_ID = 'all';
-const SKILLS_PAGE_CACHE_KEY = 'skill_marketplace_skills_page_cache_v1';
+const SKILLS_PAGE_CACHE_KEY = 'skill_marketplace_skills_page_cache_v2';
 
 type SortField = 'createdAt' | 'downloadCount' | 'viewCount';
 type SortOrder = 'asc' | 'desc';

@@ -23,6 +23,55 @@ type DocBlock =
   | { type: 'code'; code: string }
   | { type: 'divider' };
 
+function purgeStaleSkillCaches(staleSkillId: string) {
+  if (typeof window === 'undefined' || !staleSkillId) {
+    return;
+  }
+
+  const cachePrefixes = ['skill_marketplace_home_skills_', 'skill_marketplace_skills_page_cache_'];
+
+  try {
+    const keys = Object.keys(window.localStorage);
+    for (const key of keys) {
+      if (!cachePrefixes.some((prefix) => key.startsWith(prefix))) {
+        continue;
+      }
+
+      const raw = window.localStorage.getItem(key);
+      if (!raw) continue;
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        continue;
+      }
+
+      if (!Array.isArray(parsed)) {
+        continue;
+      }
+
+      const filtered = parsed.filter((item) => {
+        if (!item || typeof item !== 'object') return true;
+        const id = (item as { id?: unknown }).id;
+        return typeof id !== 'string' || id !== staleSkillId;
+      });
+
+      if (filtered.length === parsed.length) {
+        continue;
+      }
+
+      if (filtered.length === 0) {
+        window.localStorage.removeItem(key);
+      } else {
+        window.localStorage.setItem(key, JSON.stringify(filtered));
+      }
+    }
+  } catch (error) {
+    console.error('清理本地缓存失败:', error);
+  }
+}
+
 export default function SkillDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -44,6 +93,9 @@ export default function SkillDetailPage() {
         if (result.success) {
           setSkill(result.data);
         } else {
+          if (result.code === 'SKILL_NOT_FOUND') {
+            purgeStaleSkillCaches(skillId);
+          }
           message.error(result.error || '技能包不存在');
         }
       } catch (error) {
