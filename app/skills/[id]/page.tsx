@@ -393,8 +393,7 @@ export default function SkillDetailPage() {
 
           <div className="skill-description-card doc-surface">
             <div className="doc-surface-head">
-              <h3>SKILL.md</h3>
-              <span>结构化展示</span>
+              <h3>skill能力</h3>
             </div>
             <DocRenderer blocks={docBlocks} />
           </div>
@@ -714,21 +713,17 @@ export default function SkillDetailPage() {
 
         .doc-surface-head {
           display: flex;
-          align-items: baseline;
-          justify-content: space-between;
+          align-items: center;
+          justify-content: flex-start;
           border-bottom: 1px solid rgba(12, 30, 64, 0.1);
           padding-bottom: 10px;
           margin-bottom: 14px;
         }
 
         .doc-surface-head h3 {
-          font-size: 17px;
+          font-size: 20px;
+          font-weight: 800;
           margin: 0;
-        }
-
-        .doc-surface-head span {
-          font-size: 12px;
-          color: var(--text-secondary);
         }
 
         .action-card,
@@ -910,10 +905,12 @@ function DocRenderer({ blocks }: { blocks: DocBlock[] }) {
       <style jsx>{`
         .doc-content {
           color: #1f2d3f;
+          display: grid;
+          gap: 4px;
         }
 
         .doc-heading {
-          margin: 18px 0 10px;
+          margin: 20px 0 10px;
           line-height: 1.3;
           letter-spacing: -0.2px;
         }
@@ -934,9 +931,9 @@ function DocRenderer({ blocks }: { blocks: DocBlock[] }) {
         }
 
         .doc-paragraph {
-          margin: 10px 0;
-          font-size: 14px;
-          line-height: 1.72;
+          margin: 8px 0;
+          font-size: 15px;
+          line-height: 1.8;
           color: #2a3a4f;
           white-space: pre-wrap;
           word-break: break-word;
@@ -1004,6 +1001,11 @@ function DocRenderer({ blocks }: { blocks: DocBlock[] }) {
           border: 1px solid rgba(16, 30, 56, 0.12);
           border-radius: 6px;
           padding: 1px 6px;
+        }
+
+        :global(.doc-inline-strong) {
+          font-weight: 800;
+          color: #173f73;
         }
 
         @media (max-width: 680px) {
@@ -1135,7 +1137,17 @@ function parseDocBlocks(raw: string): DocBlock[] {
     }
 
     if (paragraphRows.length) {
-      blocks.push({ type: 'paragraph', text: paragraphRows.join('\n') });
+      const normalizedRows = paragraphRows.map((row) => row.trim()).filter(Boolean);
+      const shouldSplitRows =
+        normalizedRows.length >= 3 && normalizedRows.every((row) => row.length <= 72);
+
+      if (shouldSplitRows) {
+        normalizedRows.forEach((row) => {
+          blocks.push({ type: 'paragraph', text: row });
+        });
+      } else {
+        blocks.push({ type: 'paragraph', text: normalizedRows.join('\n') });
+      }
     } else {
       index += 1;
     }
@@ -1146,7 +1158,7 @@ function parseDocBlocks(raw: string): DocBlock[] {
 
 function renderInline(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = [];
-  const pattern = /`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+  const pattern = /`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*]+)\*\*/g;
   let cursor = 0;
   let match: RegExpExecArray | null = pattern.exec(text);
   let index = 0;
@@ -1173,6 +1185,12 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
         >
           {match[2]}
         </a>
+      );
+    } else if (match[4]) {
+      nodes.push(
+        <strong className="doc-inline-strong" key={`${keyPrefix}-inline-strong-${index}`}>
+          {match[4]}
+        </strong>
       );
     }
 

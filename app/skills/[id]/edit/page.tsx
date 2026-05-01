@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { message } from 'antd';
 import { useSession } from 'next-auth/react';
@@ -25,6 +25,7 @@ export default function SkillEditPage() {
   const [categories, setCategories] = useState<SkillCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
   const [form, setForm] = useState<EditFormState>({
     title: '',
     summary: '',
@@ -38,6 +39,76 @@ export default function SkillEditPage() {
     if (!skill) return false;
     return canManageSkill(session?.user?.email || null, session?.user?.id || null, skill.authorId);
   }, [session?.user?.email, session?.user?.id, skill]);
+
+  function updateDescriptionWithSelection(
+    nextValue: string,
+    nextSelectionStart: number,
+    nextSelectionEnd: number = nextSelectionStart
+  ) {
+    setForm((prev) => ({ ...prev, description: nextValue }));
+
+    requestAnimationFrame(() => {
+      const textarea = descriptionRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      textarea.setSelectionRange(nextSelectionStart, nextSelectionEnd);
+    });
+  }
+
+  function wrapSelection(prefix: string, suffix: string, placeholder: string) {
+    const textarea = descriptionRef.current;
+    if (!textarea) return;
+
+    const value = textarea.value;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = value.slice(start, end);
+    const content = selected || placeholder;
+    const nextValue = value.slice(0, start) + prefix + content + suffix + value.slice(end);
+    const contentStart = start + prefix.length;
+    const contentEnd = contentStart + content.length;
+
+    updateDescriptionWithSelection(nextValue, contentStart, contentEnd);
+  }
+
+  function prefixSelectedLines(prefix: string) {
+    const textarea = descriptionRef.current;
+    if (!textarea) return;
+
+    const value = textarea.value;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+    const lineEndRaw = value.indexOf('\n', end);
+    const lineEnd = lineEndRaw === -1 ? value.length : lineEndRaw;
+    const target = value.slice(lineStart, lineEnd);
+
+    const transformed = target
+      .split('\n')
+      .map((line) => {
+        if (!line.trim()) return line;
+        if (line.startsWith(prefix)) return line;
+        return `${prefix}${line}`;
+      })
+      .join('\n');
+
+    const nextValue = value.slice(0, lineStart) + transformed + value.slice(lineEnd);
+    const lengthDiff = transformed.length - target.length;
+    updateDescriptionWithSelection(nextValue, start, end + lengthDiff);
+  }
+
+  function insertSnippet(snippet: string, cursorOffset?: number) {
+    const textarea = descriptionRef.current;
+    if (!textarea) return;
+
+    const value = textarea.value;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const nextValue = value.slice(0, start) + snippet + value.slice(end);
+    const nextCursor = start + (cursorOffset ?? snippet.length);
+
+    updateDescriptionWithSelection(nextValue, nextCursor, nextCursor);
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -250,10 +321,52 @@ export default function SkillEditPage() {
         </div>
 
         <div className="form-group">
-          <label>详细说明 / SKILL.md 内容</label>
+          <label>skill能力内容（支持 Markdown）</label>
+          <div className="markdown-toolbar">
+            <button type="button" className="toolbar-btn" onClick={() => prefixSelectedLines('# ')}>
+              H1
+            </button>
+            <button type="button" className="toolbar-btn" onClick={() => prefixSelectedLines('## ')}>
+              H2
+            </button>
+            <button type="button" className="toolbar-btn" onClick={() => prefixSelectedLines('### ')}>
+              H3
+            </button>
+            <button
+              type="button"
+              className="toolbar-btn"
+              onClick={() => wrapSelection('**', '**', '加粗内容')}
+            >
+              加粗
+            </button>
+            <button type="button" className="toolbar-btn" onClick={() => prefixSelectedLines('- ')}>
+              列表
+            </button>
+            <button type="button" className="toolbar-btn" onClick={() => prefixSelectedLines('> ')}>
+              引用
+            </button>
+            <button
+              type="button"
+              className="toolbar-btn"
+              onClick={() => wrapSelection('```\n', '\n```', '代码示例')}
+            >
+              代码
+            </button>
+            <button
+              type="button"
+              className="toolbar-btn"
+              onClick={() => insertSnippet('\n\n---\n\n', 4)}
+            >
+              分割线
+            </button>
+          </div>
+          <p className="markdown-hint">
+            支持快捷格式：`# 标题`、`**加粗**`、`- 列表`、`&gt; 引用`、```代码块```。
+          </p>
           <textarea
             className="input textarea"
             rows={12}
+            ref={descriptionRef}
             value={form.description}
             onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
           />
@@ -268,6 +381,40 @@ export default function SkillEditPage() {
           </Link>
         </div>
       </form>
+
+      <style jsx>{`
+        .markdown-toolbar {
+          margin-top: 8px;
+          margin-bottom: 8px;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .toolbar-btn {
+          height: 32px;
+          border-radius: 8px;
+          border: 1px solid rgba(0, 122, 255, 0.25);
+          background: rgba(255, 255, 255, 0.95);
+          color: #0f4f99;
+          padding: 0 10px;
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .toolbar-btn:hover {
+          background: rgba(0, 122, 255, 0.09);
+          border-color: rgba(0, 122, 255, 0.4);
+        }
+
+        .markdown-hint {
+          margin: 0 0 10px;
+          color: var(--text-secondary);
+          font-size: 12px;
+          line-height: 1.6;
+        }
+      `}</style>
     </div>
   );
 }
