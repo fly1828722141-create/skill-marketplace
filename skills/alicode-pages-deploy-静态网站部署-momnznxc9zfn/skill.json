@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "title": "alicode-pages-deploy（静态网站部署 ）",
+  "slug": "alicode-pages-deploy-静态网站部署-momnznxc9zfn",
+  "summary": "本 Skill 提供将静态网站部署到 AliCode Pages 的完整指南，涵盖从仓库准备、文件组织、部署配置到问题排查的全流程操作说明。\r\n支持 HTML 入口文件、图片资源管理，以及多种部署失败后的快速恢复方法。",
+  "tags": [],
+  "uploadedAt": "2026-05-01T08:42:17.184Z",
+  "uploader": {
+    "id": "d29b65bc-cf1d-4fd5-aee5-9bb0dfc25ae4",
+    "name": "Fly Fly",
+    "email": "fly1828722141@gmail.com"
+  },
+  "package": {
+    "fileName": "alicode-pages-deploy.skill.zip",
+    "extension": "zip",
+    "size": 3011,
+    "rawUrl": "https://raw.githubusercontent.com/fly1828722141-create/skill-marketplace/main/skills/alicode-pages-deploy-%E9%9D%99%E6%80%81%E7%BD%91%E7%AB%99%E9%83%A8%E7%BD%B2-momnznxc9zfn/alicode-pages-deploy.skill.zip"
+  }
+}
