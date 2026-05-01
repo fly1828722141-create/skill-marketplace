@@ -15,6 +15,9 @@ import {
   toPrismaTagsValue,
 } from '@/lib/tags';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 // ===========================================
 // GET /api/skills - 获取技能包列表
 // ===========================================

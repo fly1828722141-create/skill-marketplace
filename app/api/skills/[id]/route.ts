@@ -10,6 +10,9 @@ import { successResponse, errorResponse } from '@/lib/utils';
 import { normalizeTagsFromDb, parseTagsInput, toPrismaTagsValue } from '@/lib/tags';
 import { ensureDefaultCategories } from '@/lib/skill-categories';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 interface ResolvedInstallInfo {
   installCommand?: string;
   packageUrl?: string;
