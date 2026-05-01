@@ -110,10 +110,6 @@ export default function FeedbackPage() {
 
   useEffect(() => {
     void fetchThreads();
-    const timer = setInterval(() => {
-      void fetchThreads();
-    }, 20000);
-    return () => clearInterval(timer);
   }, [viewMode, session?.user?.id]);
 
   const sortedThreads = useMemo(() => {
