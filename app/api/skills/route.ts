@@ -14,6 +14,7 @@ import {
   parseTagsInput,
   toPrismaTagsValue,
 } from '@/lib/tags';
+import { parseSkillLinkInput } from '@/lib/skill-link-input';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -215,9 +216,9 @@ export async function POST(request: NextRequest) {
       externalUrl,
     } = body;
     const normalizedTags = parseTagsInput(tags);
-    const normalizedExternalUrl =
-      typeof externalUrl === 'string' ? normalizeExternalLinkInput(externalUrl) : '';
-    const isLinkMode = Boolean(normalizedExternalUrl);
+    const parsedExternalLink =
+      typeof externalUrl === 'string' ? parseSkillLinkInput(externalUrl) : null;
+    const isLinkMode = Boolean(parsedExternalLink);
     let normalizedFileName = fileName;
     let normalizedFileSize = fileSize;
     let normalizedFileType = fileType;
@@ -238,13 +239,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (isLinkMode) {
-      if (!isHttpUrl(normalizedExternalUrl)) {
-        return NextResponse.json(
-          errorResponse('Skill 链接格式不正确，仅支持 http/https', 'VALIDATION_ERROR'),
-          { status: 400 }
-        );
-      }
-      normalizedFileName = normalizedExternalUrl;
+      normalizedFileName = parsedExternalLink?.storageValue || '';
       normalizedFileSize = 0;
       normalizedFileType = 'link';
     } else if (
@@ -350,24 +345,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-function isHttpUrl(value: string): boolean {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
-function normalizeExternalLinkInput(input: string): string {
-  const trimmed = input.trim();
-  if (!trimmed) return '';
-  if (isHttpUrl(trimmed)) return trimmed;
-
-  const urlMatch = trimmed.match(/https?:\/\/[^\s"'<>]+/i);
-  if (!urlMatch) return '';
-
-  return urlMatch[0].replace(/[),.;!?]+$/g, '');
 }

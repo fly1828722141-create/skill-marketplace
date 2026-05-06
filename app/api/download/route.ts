@@ -9,6 +9,7 @@ import prisma from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { recordEvent } from '@/lib/event-log';
 import { successResponse, errorResponse } from '@/lib/utils';
+import { parseSkillLinkInput } from '@/lib/skill-link-input';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -124,13 +125,15 @@ export async function POST(request: NextRequest) {
       skill.fileType?.toLowerCase() === 'link' || /^https?:\/\//i.test(skill.fileName);
 
     if (isExternalLinkSkill) {
-      if (!/^https?:\/\//i.test(skill.fileName)) {
+      const parsedExternalLink = parseSkillLinkInput(skill.fileName || '');
+      const resolvedSourceUrl = parsedExternalLink?.sourceUrl || '';
+      if (!/^https?:\/\//i.test(resolvedSourceUrl)) {
         return NextResponse.json(
           errorResponse('外链 Skill 地址无效', 'INVALID_LINK'),
           { status: 400 }
         );
       }
-      downloadUrl = skill.fileName;
+      downloadUrl = resolvedSourceUrl;
     } else {
       if (localFileBlob) {
         downloadUrl = `/api/download/file?skillId=${encodeURIComponent(skill.id)}`;

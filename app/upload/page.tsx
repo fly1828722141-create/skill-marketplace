@@ -14,6 +14,7 @@ import { message } from 'antd';
 import { useSession } from 'next-auth/react';
 import { SkillCategory } from '@/types';
 import { getFallbackSkillCategories } from '@/lib/category-presets';
+import { parseSkillLinkInput } from '@/lib/skill-link-input';
 import {
   SKILL_UPLOAD_ACCEPT,
   SKILL_UPLOAD_EXTENSIONS_TEXT,
@@ -157,15 +158,10 @@ export default function UploadPage() {
       return;
     }
 
-    const normalizedExternalUrl = normalizeExternalLinkInput(externalUrl);
+    const parsedExternalLink = parseSkillLinkInput(externalUrl);
     if (sourceMode === 'link') {
-      if (!normalizedExternalUrl) {
-        message.error('请粘贴可访问的 Skill 链接');
-        return;
-      }
-
-      if (!isHttpUrl(normalizedExternalUrl)) {
-        message.error('链接格式不正确，仅支持 http/https 链接');
+      if (!parsedExternalLink) {
+        message.error('请粘贴可访问的 Skill 链接或安装命令');
         return;
       }
     }
@@ -193,7 +189,7 @@ export default function UploadPage() {
       uploadData.append('tags', formData.tags);
 
       if (sourceMode === 'link') {
-        uploadData.append('externalUrl', normalizedExternalUrl);
+        uploadData.append('externalUrl', parsedExternalLink?.storageValue || '');
       } else if (file) {
         uploadData.append('file', file);
       }
@@ -226,7 +222,7 @@ export default function UploadPage() {
   const summaryLength = formData.summary.trim().length;
   const selectedCategoryName =
     categories.find((item) => item.id === formData.categoryId)?.name || '未选择';
-  const normalizedExternalUrl = normalizeExternalLinkInput(externalUrl);
+  const parsedExternalLink = parseSkillLinkInput(externalUrl);
 
   const submitBlockedReason =
     !formData.title.trim()
@@ -239,10 +235,8 @@ export default function UploadPage() {
       ? '请先选择 Skill 类型'
       : !formData.description.trim()
       ? '请先填写描述'
-      : sourceMode === 'link' && !normalizedExternalUrl
-      ? '请先粘贴 Skill 链接'
-      : sourceMode === 'link' && !isHttpUrl(normalizedExternalUrl)
-      ? '链接格式不正确，仅支持 http/https'
+      : sourceMode === 'link' && !parsedExternalLink
+      ? '请先粘贴 Skill 链接或安装命令'
       : sourceMode === 'github-package' && !githubPackageUploadEnabled
       ? '当前未开启文件发布服务'
       : sourceMode === 'github-package' && !file
@@ -458,7 +452,7 @@ export default function UploadPage() {
                     onChange={(e) => setExternalUrl(e.target.value)}
                   />
                   <p className="help-text">
-                    可直接粘贴 URL，或粘贴包含 URL 的命令文本，系统会自动提取链接。
+                    支持直接粘贴 URL，或粘贴 `npx skills add ...` 安装命令，系统会自动识别。
                   </p>
                 </div>
               ) : (
@@ -541,7 +535,7 @@ export default function UploadPage() {
               {sourceMode === 'link' ? (
                 <div className="upload-panel-stat">
                   <span>链接域名</span>
-                  <strong>{extractHost(externalUrl) || '未填写'}</strong>
+                  <strong>{extractHost(parsedExternalLink?.sourceUrl || '') || '未填写'}</strong>
                 </div>
               ) : (
                 <div className="upload-panel-stat">
@@ -580,32 +574,12 @@ export default function UploadPage() {
   );
 }
 
-function isHttpUrl(input: string): boolean {
-  try {
-    const parsed = new URL(input);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
 function extractHost(input: string): string {
   try {
     return new URL(input).hostname;
   } catch {
     return '';
   }
-}
-
-function normalizeExternalLinkInput(input: string): string {
-  const trimmed = input.trim();
-  if (!trimmed) return '';
-  if (isHttpUrl(trimmed)) return trimmed;
-
-  const urlMatch = trimmed.match(/https?:\/\/[^\s"'<>]+/i);
-  if (!urlMatch) return '';
-
-  return urlMatch[0].replace(/[),.;!?]+$/g, '');
 }
 
 function validatePackageFile(file: File): { valid: boolean; error?: string } {

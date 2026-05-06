@@ -9,6 +9,7 @@ import { canManageSkill } from '@/lib/dashboard-access';
 import { successResponse, errorResponse } from '@/lib/utils';
 import { normalizeTagsFromDb, parseTagsInput, toPrismaTagsValue } from '@/lib/tags';
 import { ensureDefaultCategories } from '@/lib/skill-categories';
+import { parseSkillLinkInput } from '@/lib/skill-link-input';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -16,6 +17,7 @@ export const revalidate = 0;
 interface ResolvedInstallInfo {
   installCommand?: string;
   packageUrl?: string;
+  sourceUrl?: string;
 }
 
 interface ParsedGitHubTreeUrl {
@@ -128,25 +130,42 @@ function buildRawGithubUrl(
   )}/${encodePathSegments(repoPath)}`;
 }
 
-async function resolveInstallInfo(sourceUrl: string): Promise<ResolvedInstallInfo> {
-  if (!isHttpUrl(sourceUrl)) {
+async function resolveInstallInfo(sourceValue: string): Promise<ResolvedInstallInfo> {
+  const parsedLink = parseSkillLinkInput(sourceValue);
+  if (!parsedLink) {
     return {};
+  }
+
+  const sourceUrl = parsedLink.sourceUrl;
+  const explicitInstallCommand = parsedLink.installCommand;
+
+  if (!sourceUrl || !isHttpUrl(sourceUrl)) {
+    return {
+      installCommand: explicitInstallCommand,
+      sourceUrl,
+    };
   }
 
   const githubTreeInfo = parseGitHubTreeUrl(sourceUrl);
   if (!githubTreeInfo) {
     return {
-      installCommand: `npx skills add ${sourceUrl}`,
+      installCommand: explicitInstallCommand || `npx skills add ${sourceUrl}`,
+      sourceUrl,
     };
   }
 
   const repoUrl = buildRepoUrl(githubTreeInfo.owner, githubTreeInfo.repo);
-  const fallbackInstallCommand = githubTreeInfo.skillSlug
-    ? `npx skills add ${repoUrl} --skill ${githubTreeInfo.skillSlug}`
-    : `npx skills add ${repoUrl}`;
+  const fallbackInstallCommand =
+    explicitInstallCommand ||
+    (githubTreeInfo.skillSlug
+      ? `npx skills add ${repoUrl} --skill ${githubTreeInfo.skillSlug}`
+      : `npx skills add ${repoUrl}`);
 
   if (!githubTreeInfo.repoPath) {
-    return { installCommand: fallbackInstallCommand };
+    return {
+      installCommand: fallbackInstallCommand,
+      sourceUrl,
+    };
   }
 
   try {
@@ -172,7 +191,10 @@ async function resolveInstallInfo(sourceUrl: string): Promise<ResolvedInstallInf
     }
 
     if (!manifestResponse.ok) {
-      return { installCommand: fallbackInstallCommand };
+      return {
+        installCommand: fallbackInstallCommand,
+        sourceUrl,
+      };
     }
 
     const manifest = await manifestResponse.json();
@@ -183,13 +205,17 @@ async function resolveInstallInfo(sourceUrl: string): Promise<ResolvedInstallInf
       return {
         installCommand: fallbackInstallCommand,
         packageUrl,
+        sourceUrl,
       };
     }
   } catch {
     // 忽略外部源解析失败，回退到仓库安装命令
   }
 
-  return { installCommand: fallbackInstallCommand };
+  return {
+    installCommand: fallbackInstallCommand,
+    sourceUrl,
+  };
 }
 
 // ===========================================
@@ -291,7 +317,13 @@ export async function GET(
       },
     });
 
-    const installInfo = await resolveInstallInfo(skill.fileName);
+    const shouldResolveInstallInfo =
+      skill.fileType?.toLowerCase() === 'link' ||
+      /^https?:\/\//i.test(skill.fileName || '') ||
+      /\bskills\s+add\b/i.test(skill.fileName || '');
+    const installInfo = shouldResolveInstallInfo
+      ? await resolveInstallInfo(skill.fileName)
+      : {};
 
     const normalizedSkill = {
       ...skill,
@@ -300,6 +332,7 @@ export async function GET(
       ratingCount: skill._count?.comments ?? 0,
       installCommand: installInfo.installCommand,
       packageUrl: installInfo.packageUrl,
+      sourceUrl: installInfo.sourceUrl,
     };
 
     return NextResponse.json(successResponse(normalizedSkill));

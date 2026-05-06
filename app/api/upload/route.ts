@@ -13,6 +13,7 @@ import { ensureDefaultCategories } from '@/lib/skill-categories';
 import { recordEvent } from '@/lib/event-log';
 import { successResponse, errorResponse } from '@/lib/utils';
 import { normalizeTagsFromDb, parseTagsInput, toPrismaTagsValue } from '@/lib/tags';
+import { parseSkillLinkInput } from '@/lib/skill-link-input';
 import {
   isGitHubSkillPublishConfigured,
   publishSkillPackageToGitHub,
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     // link 模式字段
     const externalUrlRaw = ((formData.get('externalUrl') as string) || '').trim();
-    const externalUrlInput = normalizeExternalLinkInput(externalUrlRaw);
+    const parsedExternalLink = parseSkillLinkInput(externalUrlRaw);
 
     // 文件发布模式字段
     const packageFile = formData.get('file') as File | null;
@@ -90,25 +91,18 @@ export async function POST(request: NextRequest) {
     let githubSkillSlug = '';
 
     if (sourceMode === 'link') {
-      if (!externalUrlInput) {
+      if (!parsedExternalLink) {
         return NextResponse.json(
-          errorResponse('缺少 Skill 链接', 'VALIDATION_ERROR'),
+          errorResponse('请提供 Skill 链接或安装命令', 'VALIDATION_ERROR'),
           { status: 400 }
         );
       }
 
-      if (!isHttpUrl(externalUrlInput)) {
-        return NextResponse.json(
-          errorResponse('Skill 链接格式不正确，仅支持 http/https', 'VALIDATION_ERROR'),
-          { status: 400 }
-        );
-      }
-
-      const normalizedUrl = new URL(externalUrlInput).toString();
-      fileName = normalizedUrl;
+      fileName = parsedExternalLink.storageValue;
       fileSize = 0;
-      fileType = inferFileTypeFromUrl(normalizedUrl);
-      fileUrl = normalizedUrl;
+      fileType = 'link';
+      fileUrl = parsedExternalLink.sourceUrl || parsedExternalLink.storageValue;
+      installCommand = parsedExternalLink.installCommand || '';
     } else {
       if (!isGitHubSkillPublishConfigured()) {
         return NextResponse.json(
@@ -257,46 +251,10 @@ function parseSourceMode(input: string): UploadSourceMode {
   return input === 'github-package' || input === 'file' ? 'github-package' : 'link';
 }
 
-function isHttpUrl(value: string): boolean {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
 function inferFileTypeFromFileName(fileName: string): string {
   const lower = fileName.toLowerCase();
   if (lower.endsWith('.tar.gz')) return 'tar.gz';
   const dot = lower.lastIndexOf('.');
   if (dot < 0 || dot === lower.length - 1) return 'zip';
   return lower.slice(dot + 1);
-}
-
-function inferFileTypeFromUrl(value: string): string {
-  try {
-    const parsed = new URL(value);
-    const path = parsed.pathname.toLowerCase();
-    if (path.endsWith('.tar.gz')) return 'tar.gz';
-    const fileName = path.split('/').pop() || '';
-    if (fileName.includes('.')) {
-      const ext = fileName.split('.').pop();
-      if (ext) return ext;
-    }
-  } catch {
-    // noop
-  }
-  return 'link';
-}
-
-function normalizeExternalLinkInput(input: string): string {
-  const trimmed = input.trim();
-  if (!trimmed) return '';
-  if (isHttpUrl(trimmed)) return trimmed;
-
-  const urlMatch = trimmed.match(/https?:\/\/[^\s"'<>]+/i);
-  if (!urlMatch) return '';
-
-  return urlMatch[0].replace(/[),.;!?]+$/g, '');
 }

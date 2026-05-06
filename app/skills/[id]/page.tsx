@@ -113,7 +113,13 @@ export default function SkillDetailPage() {
     !!skill &&
     (skill.fileType?.toLowerCase() === 'link' || /^https?:\/\//i.test(skill.fileName));
   const sourceUrl =
-    isExternalLinkSkill && skill && isHttpUrl(skill.fileName) ? skill.fileName : null;
+    isExternalLinkSkill && skill
+      ? isHttpUrl((skill.sourceUrl || '').trim())
+        ? (skill.sourceUrl || '').trim()
+        : isHttpUrl(skill.fileName)
+        ? skill.fileName
+        : null
+      : null;
   const sourceHost = sourceUrl ? safeHost(sourceUrl) : '';
   const installCommand =
     (skill?.installCommand || '').trim() ||
