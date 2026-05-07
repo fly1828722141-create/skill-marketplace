@@ -321,12 +321,18 @@ export default function SkillDetailPage() {
 
   return (
     <div className="skill-detail-page">
-      <nav className="breadcrumb">
+      <nav className="breadcrumb" aria-label="面包屑导航">
         <Link href="/">首页</Link>
-        <span> / </span>
+        <span className="breadcrumb-sep" aria-hidden="true">
+          /
+        </span>
         <Link href="/skills">技能库</Link>
-        <span> / </span>
-        <span>{skill.title}</span>
+        <span className="breadcrumb-sep" aria-hidden="true">
+          /
+        </span>
+        <span className="breadcrumb-current" title={skill.title}>
+          {skill.title}
+        </span>
       </nav>
 
       <div className="skill-content">
@@ -494,15 +500,40 @@ export default function SkillDetailPage() {
           margin-bottom: 18px;
           color: var(--text-secondary);
           font-size: 14px;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 14px;
+          border-radius: 14px;
+          border: 1px solid rgba(0, 0, 0, 0.08);
+          background: rgba(255, 255, 255, 0.88);
+          box-shadow: 0 6px 16px rgba(15, 27, 52, 0.08);
+          backdrop-filter: blur(8px);
+          max-width: 100%;
+          flex-wrap: wrap;
         }
 
         .breadcrumb a {
           color: var(--primary);
           text-decoration: none;
+          font-weight: 600;
         }
 
         .breadcrumb a:hover {
-          text-decoration: underline;
+          color: #005fd6;
+        }
+
+        .breadcrumb-sep {
+          color: rgba(15, 27, 52, 0.32);
+        }
+
+        .breadcrumb-current {
+          color: rgba(15, 27, 52, 0.55);
+          font-weight: 600;
+          max-width: min(56vw, 460px);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         .skill-content {

@@ -14,6 +14,9 @@ export default function AuthActions() {
     return (
       <div className="auth-actions">
         <Link href="/feedback" className="wish-nav-btn">
+          <span aria-hidden="true" className="wish-nav-btn-icon">
+            ✦
+          </span>
           我要许愿
         </Link>
         <Link href="/login" className="upload-btn">
@@ -26,6 +29,9 @@ export default function AuthActions() {
   return (
     <div className="auth-actions">
       <Link href="/feedback" className="wish-nav-btn">
+        <span aria-hidden="true" className="wish-nav-btn-icon">
+          ✦
+        </span>
         我要许愿
       </Link>
       <Link href="/upload" className="upload-btn">

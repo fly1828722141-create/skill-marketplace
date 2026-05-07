@@ -241,24 +241,42 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
-  padding: 0 20px;
-  border-radius: 14px;
-  border: 1px solid rgba(0, 122, 255, 0.28);
-  background: rgba(255, 255, 255, 0.92);
-  color: var(--primary);
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 122, 255, 0.3);
+  background: linear-gradient(135deg, #f9fcff 0%, #eef5ff 100%);
+  color: #0f67e8;
   text-decoration: none;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.01em;
-  box-shadow: 0 6px 18px rgba(0, 122, 255, 0.12);
+  box-shadow:
+    0 7px 18px rgba(0, 122, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
   transition: var(--transition);
 }
 
 .wish-nav-btn:hover {
-  border-color: rgba(0, 122, 255, 0.42);
-  background: rgba(0, 122, 255, 0.07);
-  transform: translateY(-1px);
+  border-color: rgba(0, 122, 255, 0.44);
+  box-shadow:
+    0 10px 22px rgba(0, 122, 255, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  transform: translateY(-1px) scale(1.01);
+}
+
+.wish-nav-btn-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #fff;
+  background: linear-gradient(135deg, #4b92ff 0%, #2b7cff 100%);
+  box-shadow: 0 4px 10px rgba(24, 107, 243, 0.34);
 }
 
 .auth-actions {
@@ -533,13 +551,15 @@ button {
   position: relative;
   overflow: hidden;
   isolation: isolate;
-  border-radius: 24%;
-  border: 1px solid rgba(255, 255, 255, 0.56);
+  border-radius: var(--skill-icon-radius, 24%);
+  border: 1px solid var(--skill-icon-ring-color, rgba(255, 255, 255, 0.56));
+  transform: var(--skill-icon-tilt, rotate(0deg));
   box-shadow:
     0 10px 24px rgba(40, 78, 126, 0.22),
     0 3px 8px rgba(48, 95, 166, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.56),
     inset 0 -10px 20px rgba(8, 26, 56, 0.14);
+  transition: transform 0.24s ease, box-shadow 0.24s ease;
 }
 
 .skill-icon {
@@ -573,7 +593,7 @@ button {
   position: absolute;
   inset: 1px;
   border-radius: inherit;
-  border: 1px solid rgba(255, 255, 255, 0.24);
+  border: 1px solid var(--skill-icon-overlay-color, rgba(255, 255, 255, 0.24));
   pointer-events: none;
   z-index: 3;
 }
@@ -582,7 +602,7 @@ button {
   width: 30px;
   height: 30px;
   fill: none;
-  stroke: #fff;
+  stroke: var(--skill-icon-glyph-color, #fff);
   stroke-width: 2.15;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -595,6 +615,10 @@ button {
   width: 21px;
   height: 21px;
   stroke-width: 2.2;
+}
+
+.skill-card:hover .skill-icon {
+  transform: translateY(-1px) scale(1.03) var(--skill-icon-tilt, rotate(0deg));
 }
 
 .skill-icon.blue,
@@ -1787,32 +1811,63 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .review-rating-badge {
-  font-size: 12px;
-  background: rgba(0, 122, 255, 0.1);
-  color: var(--primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
   border-radius: 999px;
-  padding: 2px 8px;
+  border: 1px solid rgba(0, 122, 255, 0.2);
+  background: linear-gradient(135deg, rgba(0, 122, 255, 0.12) 0%, rgba(84, 142, 255, 0.08) 100%);
+  color: #0f67e8;
+  flex-shrink: 0;
 }
 
 .review-like-btn {
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  line-height: 1;
+  white-space: nowrap;
+  border: 1px solid rgba(0, 0, 0, 0.14);
   border-radius: 999px;
-  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 700;
   background: #fff;
   color: var(--text-secondary);
   cursor: pointer;
+  flex-shrink: 0;
+  transition: var(--transition);
 }
 
 .review-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  line-height: 1;
+  white-space: nowrap;
   border: 1px solid rgba(255, 59, 48, 0.35);
   border-radius: 999px;
-  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 700;
   background: rgba(255, 59, 48, 0.1);
   color: #a62118;
   cursor: pointer;
+  flex-shrink: 0;
+  transition: var(--transition);
 }
 
 .review-delete-btn:disabled {
@@ -1820,10 +1875,24 @@ button {
   cursor: not-allowed;
 }
 
+.review-delete-btn:hover:not(:disabled) {
+  background: rgba(255, 59, 48, 0.15);
+  border-color: rgba(255, 59, 48, 0.45);
+}
+
+.review-action-symbol {
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .review-like-btn.active {
   border-color: rgba(0, 122, 255, 0.3);
   color: var(--primary);
   background: rgba(0, 122, 255, 0.08);
+}
+
+.review-like-btn:hover {
+  border-color: rgba(0, 122, 255, 0.26);
 }
 
 .review-content {
@@ -2394,6 +2463,16 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .review-item-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .review-actions {
+    justify-content: flex-start;
+  }
+
   .logo-icon {
     width: 46px;
     height: 46px;
@@ -2411,8 +2490,15 @@ button {
 
   .wish-nav-btn {
     min-height: 40px;
-    padding: 0 12px;
-    font-size: 12px;
+    padding: 0 14px;
+    gap: 6px;
+    font-size: 13px;
+  }
+
+  .wish-nav-btn-icon {
+    width: 16px;
+    height: 16px;
+    font-size: 11px;
   }
 
   .auth-user-name,

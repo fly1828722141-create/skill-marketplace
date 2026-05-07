@@ -448,7 +448,12 @@ export default function SkillReviews({
                 </div>
                 <div className="review-actions">
                   {typeof review.rating === 'number' && (
-                    <span className="review-rating-badge">{review.rating} 星</span>
+                    <span className="review-rating-badge">
+                      <span className="review-action-symbol" aria-hidden="true">
+                        ★
+                      </span>
+                      {review.rating} 星
+                    </span>
                   )}
                   {isAdmin ? (
                     <button
@@ -457,7 +462,10 @@ export default function SkillReviews({
                       disabled={deletingReviewId === review.id}
                       onClick={() => void deleteReview(review.id)}
                     >
-                      {deletingReviewId === review.id ? '删除中...' : '删除'}
+                      <span className="review-action-symbol" aria-hidden="true">
+                        ⌫
+                      </span>
+                      <span>{deletingReviewId === review.id ? '删除中...' : '删除'}</span>
                     </button>
                   ) : null}
                   <button
@@ -467,7 +475,10 @@ export default function SkillReviews({
                     }`}
                     onClick={() => toggleLike(review.id)}
                   >
-                    👍 {formatNumber(review.likeCount)}
+                    <span className="review-action-symbol" aria-hidden="true">
+                      {review.likedByCurrentUser ? '♥' : '♡'}
+                    </span>
+                    <span>{formatNumber(review.likeCount)}</span>
                   </button>
                 </div>
               </div>
