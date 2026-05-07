@@ -57,6 +57,7 @@ model SkillCategory {
   // 关联关系
   skills        Skill[]
   eventLogs     EventLog[]
+  ingestCandidates IngestCandidate[]
 
   @@index([sortOrder])
   @@map("skill_categories")
@@ -295,4 +296,74 @@ model EventLog {
   @@index([skillId, createdAt])
   @@index([categoryId, createdAt])
   @@map("event_logs")
+}
+
+model IngestCandidate {
+  id               String         @id @default(uuid())
+  source           String         // 数据来源：github
+  sourceId         String         // 来源内唯一 ID，例如 repo full name
+  dedupeKey        String         @unique
+  status           String         @default("pending") // pending, approved, rejected, published, failed
+  autoDecision     String?        // allow, hold
+  autoDecisionNote String?        @db.Text
+  failureReason    String?        @db.Text
+  repoFullName     String
+  repoUrl          String
+  sourceUrl        String
+  installCommand   String
+  title            String
+  summary          String?
+  description      String?        @db.Text
+  tags             String[]
+  licenseKey       String?
+  language         String?
+  pushedAt         DateTime?
+  stars            Int            @default(0)
+  forks            Int            @default(0)
+  watchers         Int            @default(0)
+  openIssues       Int            @default(0)
+  archived         Boolean        @default(false)
+  disabled         Boolean        @default(false)
+  categoryId       String?
+  publishedSkillId String?
+  publishedAt      DateTime?
+  discoveredAt     DateTime       @default(now())
+  lastSeenAt       DateTime       @default(now())
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  category         SkillCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([status, discoveredAt])
+  @@index([status, pushedAt])
+  @@index([repoFullName])
+  @@index([publishedSkillId])
+  @@index([categoryId])
+  @@map("ingest_candidates")
+}
+
+model IngestRun {
+  id             String   @id @default(uuid())
+  runType        String   // discover, publish
+  triggerType    String   // cron, admin, hmac, manual
+  triggerLabel   String?
+  status         String   @default("running") // running, success, failed
+  querySnapshot  String?  @db.Text
+  scannedCount   Int      @default(0)
+  insertedCount  Int      @default(0)
+  updatedCount   Int      @default(0)
+  skippedCount   Int      @default(0)
+  selectedCount  Int      @default(0)
+  publishedCount Int      @default(0)
+  failedCount    Int      @default(0)
+  heldCount      Int      @default(0)
+  message        String?  @db.Text
+  startedAt      DateTime @default(now())
+  finishedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([runType, startedAt])
+  @@index([status, startedAt])
+  @@map("ingest_runs")
 }

@@ -1,0 +1,93 @@
+import { DASHBOARD_OWNER_EMAIL } from '@/lib/dashboard-access';
+
+function readEnv(name: string, fallback = ''): string {
+  return (process.env[name] || fallback).trim();
+}
+
+function readBool(name: string, fallback: boolean): boolean {
+  const raw = readEnv(name);
+  if (!raw) return fallback;
+  const normalized = raw.toLowerCase();
+  return ['1', 'true', 'yes', 'on'].includes(normalized);
+}
+
+function readInt(name: string, fallback: number, options?: { min?: number; max?: number }): number {
+  const raw = readEnv(name);
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  let value = parsed;
+  if (typeof options?.min === 'number') value = Math.max(options.min, value);
+  if (typeof options?.max === 'number') value = Math.min(options.max, value);
+  return value;
+}
+
+function readCsv(name: string, fallback: string[]): string[] {
+  const raw = readEnv(name);
+  const source = raw || fallback.join(',');
+  return source
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+const DEFAULT_GITHUB_QUERIES = [
+  'skill marketplace stars:>20 archived:false',
+  'codex skill stars:>10 archived:false',
+  'npx skills add stars:>5 archived:false',
+];
+
+const DEFAULT_LICENSE_ALLOWLIST = [
+  'mit',
+  'apache-2.0',
+  'bsd-2-clause',
+  'bsd-3-clause',
+  'mpl-2.0',
+  'isc',
+  'unlicense',
+];
+
+export interface SkillIngestConfig {
+  githubApiBase: string;
+  githubToken: string;
+  githubQueries: string[];
+  discoverPerQuery: number;
+  discoverMaxCandidates: number;
+  autopublishEnabled: boolean;
+  publishBatchSize: number;
+  minStars: number;
+  maxInactivityDays: number;
+  requireLicense: boolean;
+  allowedLicenses: string[];
+  adminEmail: string;
+  cronSecret: string;
+  hmacSecret: string;
+  hmacMaxSkewSeconds: number;
+}
+
+export function getSkillIngestConfig(): SkillIngestConfig {
+  return {
+    githubApiBase: readEnv('GITHUB_API_BASE', 'https://api.github.com').replace(/\/+$/, ''),
+    githubToken: readEnv('GITHUB_DISCOVERY_TOKEN') || readEnv('GITHUB_TOKEN'),
+    githubQueries: readCsv('INGEST_GITHUB_QUERIES', DEFAULT_GITHUB_QUERIES),
+    discoverPerQuery: readInt('INGEST_DISCOVER_PER_QUERY', 15, { min: 1, max: 100 }),
+    discoverMaxCandidates: readInt('INGEST_DISCOVER_MAX_CANDIDATES', 80, {
+      min: 5,
+      max: 500,
+    }),
+    autopublishEnabled: readBool('INGEST_AUTOPUBLISH_ENABLED', false),
+    publishBatchSize: readInt('INGEST_PUBLISH_BATCH_SIZE', 20, { min: 1, max: 200 }),
+    minStars: readInt('INGEST_MIN_STARS', 30, { min: 0, max: 200000 }),
+    maxInactivityDays: readInt('INGEST_MAX_INACTIVITY_DAYS', 240, { min: 1, max: 3650 }),
+    requireLicense: readBool('INGEST_REQUIRE_LICENSE', true),
+    allowedLicenses: readCsv('INGEST_ALLOWED_LICENSES', DEFAULT_LICENSE_ALLOWLIST).map((key) =>
+      key.toLowerCase()
+    ),
+    adminEmail: readEnv('INGEST_ADMIN_EMAIL', DASHBOARD_OWNER_EMAIL).toLowerCase(),
+    cronSecret: readEnv('VERCEL_CRON_SECRET') || readEnv('CRON_SECRET'),
+    hmacSecret: readEnv('INGEST_HMAC_SECRET'),
+    hmacMaxSkewSeconds: readInt('INGEST_HMAC_MAX_SKEW_SECONDS', 300, {
+      min: 30,
+      max: 3600,
+    }),
+  };
+}
