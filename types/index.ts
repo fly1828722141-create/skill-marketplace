@@ -28,6 +28,8 @@ export interface SkillCategory {
   name: string;
   icon?: string;
   sortOrder?: number;
+  status?: 'active' | 'inactive' | string;
+  skillCount?: number;
 }
 
 // ===========================================
