@@ -301,7 +301,7 @@ model EventLog {
 model IngestCandidate {
   id               String         @id @default(uuid())
   source           String         // 数据来源：github
-  sourceId         String         // 来源内唯一 ID，例如 repo full name
+  sourceId         String         // 来源内唯一 ID，例如 GitHub repo.id
   dedupeKey        String         @unique
   status           String         @default("pending") // pending, approved, rejected, published, failed
   autoDecision     String?        // allow, hold

@@ -202,7 +202,7 @@ export default function IngestDashboardPage() {
       const discover = result?.data?.discover;
       const publish = result?.data?.publish;
       message.success(
-        `收录完成：扫描 ${discover?.scannedCount ?? 0}，新增 ${discover?.insertedCount ?? 0}，发布 ${publish?.publishedCount ?? 0}`
+        `收录完成：扫描 ${discover?.scannedCount ?? 0}，过滤 ${discover?.qualityFilteredCount ?? 0}，新增 ${discover?.insertedCount ?? 0}，发布 ${publish?.publishedCount ?? 0}`
       );
       setPage(1);
       await loadCandidates();

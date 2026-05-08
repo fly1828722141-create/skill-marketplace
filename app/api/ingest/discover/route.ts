@@ -9,6 +9,7 @@ export const revalidate = 0;
 interface DiscoverRequestBody {
   queries?: string[];
   perQuery?: number;
+  maxPagesPerQuery?: number;
   maxCandidates?: number;
   runPublishWorker?: boolean;
   publishBatchSize?: number;
@@ -67,6 +68,7 @@ async function runDiscover(
     ? body.queries.map((item) => String(item || '').trim()).filter(Boolean)
     : undefined;
   const perQuery = parseNumber(body.perQuery);
+  const maxPagesPerQuery = parseNumber(body.maxPagesPerQuery);
   const maxCandidates = parseNumber(body.maxCandidates);
 
   const discoverResult = await runGitHubDiscovery({
@@ -74,6 +76,7 @@ async function runDiscover(
     triggerLabel: actor.triggerLabel,
     queries,
     perQuery,
+    maxPagesPerQuery,
     maxCandidates,
   });
 

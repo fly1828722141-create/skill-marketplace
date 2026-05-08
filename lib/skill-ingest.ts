@@ -40,6 +40,7 @@ interface GitHubRepo {
 export interface DiscoveryOptions extends IngestRunContext {
   queries?: string[];
   perQuery?: number;
+  maxPagesPerQuery?: number;
   maxCandidates?: number;
 }
 
@@ -49,6 +50,7 @@ export interface DiscoveryResult {
   insertedCount: number;
   updatedCount: number;
   skippedCount: number;
+  qualityFilteredCount: number;
   totalCandidates: number;
   exhausted: boolean;
 }
@@ -70,6 +72,11 @@ export interface PublishResult {
 interface AutoDecision {
   allow: boolean;
   note: string;
+}
+
+interface CollectionDecision {
+  allow: boolean;
+  reason: string;
 }
 
 function uniqueStrings(items: Array<string | null | undefined>, max = 10): string[] {
@@ -171,11 +178,80 @@ function pickCategoryId(options: {
   return categories[0]?.id || null;
 }
 
+function evaluateCollectionDecision(repo: GitHubRepo): CollectionDecision {
+  const config = getSkillIngestConfig();
+
+  if (repo.archived || repo.disabled) {
+    return {
+      allow: false,
+      reason: '仓库已归档或禁用',
+    };
+  }
+
+  const stars = Number(repo.stargazers_count || 0);
+  if (stars < config.minStars) {
+    return {
+      allow: false,
+      reason: `Star 低于阈值（${stars} < ${config.minStars}）`,
+    };
+  }
+
+  const forks = Number(repo.forks_count || 0);
+  if (forks < config.minForks) {
+    return {
+      allow: false,
+      reason: `Fork 低于阈值（${forks} < ${config.minForks}）`,
+    };
+  }
+
+  if (config.requireLicense) {
+    const license = (repo.license?.key || '').toLowerCase();
+    if (!license) {
+      return {
+        allow: false,
+        reason: '缺少 License 信息',
+      };
+    }
+
+    if (!config.allowedLicenses.includes(license)) {
+      return {
+        allow: false,
+        reason: `License 不在允许列表（${license}）`,
+      };
+    }
+  }
+
+  if (repo.pushed_at) {
+    const pushedAt = new Date(repo.pushed_at);
+    if (!Number.isNaN(pushedAt.getTime())) {
+      const inactiveDays =
+        (Date.now() - pushedAt.getTime()) / (1000 * 60 * 60 * 24);
+      if (inactiveDays > config.maxInactivityDays) {
+        return {
+          allow: false,
+          reason: `仓库超过 ${config.maxInactivityDays} 天未更新`,
+        };
+      }
+    }
+  } else {
+    return {
+      allow: false,
+      reason: '缺少更新时间',
+    };
+  }
+
+  return {
+    allow: true,
+    reason: '命中收录规则',
+  };
+}
+
 function evaluateAutoDecision(candidate: {
   status: string;
   archived: boolean;
   disabled: boolean;
   stars: number;
+  forks: number;
   licenseKey: string | null;
   pushedAt: Date | null;
 }): AutoDecision {
@@ -206,6 +282,13 @@ function evaluateAutoDecision(candidate: {
     return {
       allow: false,
       note: `Star 低于阈值（${candidate.stars} < ${config.minStars}）`,
+    };
+  }
+
+  if (candidate.forks < config.minForks) {
+    return {
+      allow: false,
+      note: `Fork 低于阈值（${candidate.forks} < ${config.minForks}）`,
     };
   }
 
@@ -242,14 +325,18 @@ function evaluateAutoDecision(candidate: {
   };
 }
 
-async function requestGitHubSearch(query: string, perPage: number): Promise<GitHubSearchResponse> {
+async function requestGitHubSearch(
+  query: string,
+  perPage: number,
+  page: number
+): Promise<GitHubSearchResponse> {
   const config = getSkillIngestConfig();
   const params = new URLSearchParams({
     q: query,
     sort: 'updated',
     order: 'desc',
     per_page: String(perPage),
-    page: '1',
+    page: String(page),
   });
 
   const headers: Record<string, string> = {
@@ -330,8 +417,29 @@ async function finishIngestRun(
   });
 }
 
+async function findExistingSkillIdBySource(repo: GitHubRepo): Promise<string | null> {
+  const installCommand = buildInstallCommand(repo);
+  const parsed = parseSkillLinkInput(installCommand);
+  const installStorage = parsed?.storageValue || installCommand;
+
+  const existing = await prisma.skill.findFirst({
+    where: {
+      OR: [{ fileName: installStorage }, { fileName: repo.html_url }],
+      status: {
+        in: ['active', 'archived'],
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  return existing?.id || null;
+}
+
 async function upsertCandidateFromRepo(repo: GitHubRepo): Promise<'inserted' | 'updated'> {
-  const dedupeKey = `github:${repo.full_name.toLowerCase()}`;
+  const sourceId = String(repo.id);
+  const dedupeKey = `github:${sourceId}`;
   const title = normalizeTitle(repo);
   const summary = normalizeSummary(
     repo.description || '',
@@ -347,10 +455,11 @@ async function upsertCandidateFromRepo(repo: GitHubRepo): Promise<'inserted' | '
 
   const now = new Date();
   const pushedAt = repo.pushed_at ? new Date(repo.pushed_at) : null;
+  const existingSkillId = await findExistingSkillIdBySource(repo);
 
   const data = {
     source: 'github',
-    sourceId: String(repo.id),
+    sourceId,
     dedupeKey,
     repoFullName: repo.full_name,
     repoUrl: repo.html_url,
@@ -372,8 +481,11 @@ async function upsertCandidateFromRepo(repo: GitHubRepo): Promise<'inserted' | '
     lastSeenAt: now,
   };
 
-  const existing = await prisma.ingestCandidate.findUnique({
-    where: { dedupeKey },
+  const existing = await prisma.ingestCandidate.findFirst({
+    where: {
+      source: 'github',
+      OR: [{ sourceId }, { dedupeKey }, { repoFullName: repo.full_name }],
+    },
     select: {
       id: true,
       status: true,
@@ -384,22 +496,39 @@ async function upsertCandidateFromRepo(repo: GitHubRepo): Promise<'inserted' | '
     await prisma.ingestCandidate.create({
       data: {
         ...data,
-        status: 'pending',
+        status: existingSkillId ? 'published' : 'pending',
+        autoDecision: existingSkillId ? 'allow' : null,
+        autoDecisionNote: existingSkillId ? '已存在同源 Skill，自动标记已发布' : null,
+        publishedSkillId: existingSkillId || null,
+        publishedAt: existingSkillId ? now : null,
+        failureReason: null,
         discoveredAt: now,
       },
     });
     return 'inserted';
   }
 
+  const updateData: Record<string, unknown> = {
+    ...data,
+  };
+
+  if (existingSkillId) {
+    updateData.status = 'published';
+    updateData.autoDecision = 'allow';
+    updateData.autoDecisionNote = '已存在同源 Skill，自动标记已发布';
+    updateData.publishedSkillId = existingSkillId;
+    updateData.publishedAt = now;
+    updateData.failureReason = null;
+  } else {
+    updateData.status = existing.status === 'failed' ? 'pending' : existing.status;
+    updateData.failureReason = existing.status === 'failed' ? null : undefined;
+    updateData.autoDecision = null;
+    updateData.autoDecisionNote = null;
+  }
+
   await prisma.ingestCandidate.update({
     where: { id: existing.id },
-    data: {
-      ...data,
-      status: existing.status === 'failed' ? 'pending' : existing.status,
-      failureReason: existing.status === 'failed' ? null : undefined,
-      autoDecision: null,
-      autoDecisionNote: null,
-    },
+    data: updateData,
   });
   return 'updated';
 }
@@ -665,19 +794,21 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
       ? options.queries.map((item) => item.trim()).filter(Boolean)
       : config.githubQueries;
   const perQuery = options.perQuery || config.discoverPerQuery;
+  const maxPagesPerQuery = options.maxPagesPerQuery || config.discoverMaxPagesPerQuery;
   const maxCandidates = options.maxCandidates || config.discoverMaxCandidates;
 
   const run = await createIngestRun({
     runType: 'discover',
     triggerType: options.triggerType,
     triggerLabel: options.triggerLabel,
-    querySnapshot: JSON.stringify({ queries, perQuery, maxCandidates }),
+    querySnapshot: JSON.stringify({ queries, perQuery, maxPagesPerQuery, maxCandidates }),
   });
 
   let scannedCount = 0;
   let insertedCount = 0;
   let updatedCount = 0;
   let skippedCount = 0;
+  let qualityFilteredCount = 0;
 
   try {
     const seen = new Set<string>();
@@ -685,27 +816,44 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
     for (const query of queries) {
       if (seen.size >= maxCandidates) break;
 
-      const response = await requestGitHubSearch(query, perQuery);
-      for (const repo of response.items || []) {
+      for (let page = 1; page <= maxPagesPerQuery; page += 1) {
         if (seen.size >= maxCandidates) break;
 
-        const key = String(repo.id);
-        if (seen.has(key)) {
-          skippedCount += 1;
-          continue;
+        const response = await requestGitHubSearch(query, perQuery, page);
+        const items = Array.isArray(response.items) ? response.items : [];
+        if (items.length === 0) break;
+
+        for (const repo of items) {
+          if (seen.size >= maxCandidates) break;
+
+          const key = String(repo.id);
+          if (seen.has(key)) {
+            skippedCount += 1;
+            continue;
+          }
+          seen.add(key);
+
+          if (!repo.full_name || !repo.html_url) {
+            skippedCount += 1;
+            continue;
+          }
+
+          scannedCount += 1;
+
+          const collectionDecision = evaluateCollectionDecision(repo);
+          if (!collectionDecision.allow) {
+            qualityFilteredCount += 1;
+            continue;
+          }
+
+          const result = await upsertCandidateFromRepo(repo);
+          if (result === 'inserted') insertedCount += 1;
+          if (result === 'updated') updatedCount += 1;
         }
-        seen.add(key);
 
-        if (!repo.full_name || !repo.html_url) {
-          skippedCount += 1;
-          continue;
+        if (items.length < perQuery) {
+          break;
         }
-
-        scannedCount += 1;
-
-        const result = await upsertCandidateFromRepo(repo);
-        if (result === 'inserted') insertedCount += 1;
-        if (result === 'updated') updatedCount += 1;
       }
     }
 
@@ -715,7 +863,7 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
       insertedCount,
       updatedCount,
       skippedCount,
-      message: `扫描 ${scannedCount} 条，新增 ${insertedCount}，更新 ${updatedCount}`,
+      message: `扫描 ${scannedCount} 条，质量过滤 ${qualityFilteredCount}，新增 ${insertedCount}，更新 ${updatedCount}`,
     });
 
     return {
@@ -724,6 +872,7 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
       insertedCount,
       updatedCount,
       skippedCount,
+      qualityFilteredCount,
       totalCandidates: seen.size,
       exhausted: seen.size >= maxCandidates,
     };

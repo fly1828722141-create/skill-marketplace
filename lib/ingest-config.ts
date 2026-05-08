@@ -31,9 +31,9 @@ function readCsv(name: string, fallback: string[]): string[] {
 }
 
 const DEFAULT_GITHUB_QUERIES = [
-  'skill marketplace stars:>20 archived:false',
-  'codex skill stars:>10 archived:false',
-  'npx skills add stars:>5 archived:false',
+  '"npx skills add" stars:>20 archived:false fork:false',
+  '"skills marketplace" "claude" stars:>80 archived:false fork:false',
+  '"awesome-codex-skills" archived:false fork:false',
 ];
 
 const DEFAULT_LICENSE_ALLOWLIST = [
@@ -51,10 +51,12 @@ export interface SkillIngestConfig {
   githubToken: string;
   githubQueries: string[];
   discoverPerQuery: number;
+  discoverMaxPagesPerQuery: number;
   discoverMaxCandidates: number;
   autopublishEnabled: boolean;
   publishBatchSize: number;
   minStars: number;
+  minForks: number;
   maxInactivityDays: number;
   requireLicense: boolean;
   allowedLicenses: string[];
@@ -70,13 +72,18 @@ export function getSkillIngestConfig(): SkillIngestConfig {
     githubToken: readEnv('GITHUB_DISCOVERY_TOKEN') || readEnv('GITHUB_TOKEN'),
     githubQueries: readCsv('INGEST_GITHUB_QUERIES', DEFAULT_GITHUB_QUERIES),
     discoverPerQuery: readInt('INGEST_DISCOVER_PER_QUERY', 15, { min: 1, max: 100 }),
+    discoverMaxPagesPerQuery: readInt('INGEST_DISCOVER_MAX_PAGES_PER_QUERY', 3, {
+      min: 1,
+      max: 10,
+    }),
     discoverMaxCandidates: readInt('INGEST_DISCOVER_MAX_CANDIDATES', 80, {
       min: 5,
       max: 500,
     }),
     autopublishEnabled: readBool('INGEST_AUTOPUBLISH_ENABLED', false),
     publishBatchSize: readInt('INGEST_PUBLISH_BATCH_SIZE', 20, { min: 1, max: 200 }),
-    minStars: readInt('INGEST_MIN_STARS', 30, { min: 0, max: 200000 }),
+    minStars: readInt('INGEST_MIN_STARS', 50, { min: 0, max: 200000 }),
+    minForks: readInt('INGEST_MIN_FORKS', 5, { min: 0, max: 200000 }),
     maxInactivityDays: readInt('INGEST_MAX_INACTIVITY_DAYS', 240, { min: 1, max: 3650 }),
     requireLicense: readBool('INGEST_REQUIRE_LICENSE', true),
     allowedLicenses: readCsv('INGEST_ALLOWED_LICENSES', DEFAULT_LICENSE_ALLOWLIST).map((key) =>
