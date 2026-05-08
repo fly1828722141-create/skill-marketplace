@@ -1159,6 +1159,7 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
     Array.isArray(options.queries) && options.queries.length > 0
       ? options.queries.map((item) => item.trim()).filter(Boolean)
       : config.githubQueries;
+  const normalizedQueries = [...new Set(queries)];
   const perQuery = options.perQuery || config.discoverPerQuery;
   const maxPagesPerQuery = options.maxPagesPerQuery || config.discoverMaxPagesPerQuery;
   const maxCandidates = options.maxCandidates || config.discoverMaxCandidates;
@@ -1167,7 +1168,13 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
     runType: 'discover',
     triggerType: options.triggerType,
     triggerLabel: options.triggerLabel,
-    querySnapshot: JSON.stringify({ queries, perQuery, maxPagesPerQuery, maxCandidates }),
+    querySnapshot: JSON.stringify({
+      queries: normalizedQueries,
+      perQuery,
+      maxPagesPerQuery,
+      maxCandidates,
+      schedule: 'round-robin',
+    }),
   });
 
   let scannedCount = 0;
@@ -1178,16 +1185,26 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
 
   try {
     const seen = new Set<string>();
+    const exhaustedQueryIndex = new Set<number>();
 
-    for (const query of queries) {
+    for (let page = 1; page <= maxPagesPerQuery; page += 1) {
       if (seen.size >= maxCandidates) break;
 
-      for (let page = 1; page <= maxPagesPerQuery; page += 1) {
-        if (seen.size >= maxCandidates) break;
+      let pageFetchedAny = false;
 
+      for (let queryIndex = 0; queryIndex < normalizedQueries.length; queryIndex += 1) {
+        if (seen.size >= maxCandidates) break;
+        if (exhaustedQueryIndex.has(queryIndex)) continue;
+
+        const query = normalizedQueries[queryIndex];
         const response = await requestGitHubSearch(query, perQuery, page);
         const items = Array.isArray(response.items) ? response.items : [];
-        if (items.length === 0) break;
+        if (items.length === 0) {
+          exhaustedQueryIndex.add(queryIndex);
+          continue;
+        }
+
+        pageFetchedAny = true;
 
         for (const repo of items) {
           if (seen.size >= maxCandidates) break;
@@ -1218,8 +1235,16 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
         }
 
         if (items.length < perQuery) {
-          break;
+          exhaustedQueryIndex.add(queryIndex);
         }
+      }
+
+      if (!pageFetchedAny) {
+        break;
+      }
+
+      if (exhaustedQueryIndex.size >= normalizedQueries.length) {
+        break;
       }
     }
 
