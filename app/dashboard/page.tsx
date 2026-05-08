@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -541,6 +542,9 @@ export default function DashboardPage() {
       <div className="dashboard-header">
         <h1>数据看板</h1>
         <div className="dashboard-actions">
+          <Link href="/dashboard/ingest" className="btn btn-secondary">
+            收录审核台
+          </Link>
           <label htmlFor="days">统计窗口</label>
           <select
             id="days"

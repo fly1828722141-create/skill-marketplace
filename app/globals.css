@@ -2428,6 +2428,193 @@ button {
   max-width: 420px;
 }
 
+.ingest-page {
+  padding-top: 18px;
+}
+
+.ingest-header {
+  align-items: flex-start;
+}
+
+.ingest-header-actions {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ingest-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.ingest-summary-item {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.ingest-summary-item span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.ingest-summary-item strong {
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.ingest-filter-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ingest-filter-tab {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--text-primary);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.ingest-filter-tab span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.ingest-filter-tab.active {
+  border-color: rgba(0, 122, 255, 0.36);
+  background: rgba(0, 122, 255, 0.1);
+  color: #0a4e95;
+}
+
+.ingest-table th {
+  white-space: nowrap;
+}
+
+.ingest-skill-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.ingest-repo-cell {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.ingest-repo-link {
+  color: #0c4f9b;
+  font-size: 13px;
+}
+
+.ingest-summary-text {
+  margin: 0 0 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ingest-command {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: #0a3c73;
+  background: rgba(0, 122, 255, 0.08);
+  border: 1px solid rgba(0, 122, 255, 0.16);
+  border-radius: 10px;
+  padding: 6px 8px;
+  word-break: break-all;
+}
+
+.ingest-metrics {
+  display: grid;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.ingest-note {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  max-width: 320px;
+}
+
+.ingest-time-cell {
+  display: grid;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.ingest-status-badge {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  border: 1px solid transparent;
+}
+
+.ingest-status-pending {
+  background: rgba(255, 149, 0, 0.12);
+  color: #8e5600;
+  border-color: rgba(255, 149, 0, 0.2);
+}
+
+.ingest-status-approved {
+  background: rgba(82, 196, 26, 0.14);
+  color: #2a6e0b;
+  border-color: rgba(82, 196, 26, 0.24);
+}
+
+.ingest-status-rejected {
+  background: rgba(255, 59, 48, 0.12);
+  color: #a11d12;
+  border-color: rgba(255, 59, 48, 0.2);
+}
+
+.ingest-status-published {
+  background: rgba(0, 122, 255, 0.12);
+  color: #0c4f9b;
+  border-color: rgba(0, 122, 255, 0.2);
+}
+
+.ingest-status-failed {
+  background: rgba(139, 79, 255, 0.12);
+  color: #5a2da0;
+  border-color: rgba(139, 79, 255, 0.2);
+}
+
+.ingest-actions {
+  min-width: 210px;
+}
+
+.ingest-pagination {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
 /* 加载骨架 */
 .skeleton {
   background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
@@ -2461,6 +2648,44 @@ button {
 
   .dashboard-category-form {
     grid-template-columns: 1fr;
+  }
+
+  .ingest-header-actions {
+    width: 100%;
+  }
+
+  .ingest-header-actions .btn {
+    width: 100%;
+  }
+
+  .ingest-filter-tabs {
+    gap: 6px;
+  }
+
+  .ingest-filter-tab {
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+
+  .ingest-table th,
+  .ingest-table td {
+    min-width: 180px;
+  }
+
+  .ingest-actions {
+    min-width: 220px;
+  }
+
+  .ingest-pagination {
+    align-items: stretch;
+  }
+
+  .ingest-pagination .dashboard-inline-actions {
+    width: 100%;
+  }
+
+  .ingest-pagination .dashboard-inline-actions .btn {
+    flex: 1;
   }
 
   .review-item-header {
