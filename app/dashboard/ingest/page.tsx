@@ -150,6 +150,7 @@ export default function IngestDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [runningDiscover, setRunningDiscover] = useState(false);
   const [runningPublish, setRunningPublish] = useState(false);
+  const [runningRecategorize, setRunningRecategorize] = useState(false);
   const [reviewingId, setReviewingId] = useState('');
   const [candidates, setCandidates] = useState<IngestCandidate[]>([]);
   const [total, setTotal] = useState(0);
@@ -358,6 +359,40 @@ export default function IngestDashboardPage() {
     }
   }
 
+  async function runRecategorizeNow() {
+    setRunningRecategorize(true);
+    try {
+      const response = await fetch('/api/ingest/recategorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          includeCandidates: true,
+          deactivateLegacy: true,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || '批量重分类失败');
+      }
+
+      const taxonomy = result?.data?.taxonomy || {};
+      const skillsResult = result?.data?.skills || {};
+      const candidatesResult = result?.data?.candidates || {};
+
+      message.success(
+        `重分类完成：Skill 扫描 ${skillsResult.scanned ?? 0}，更新 ${skillsResult.recategorized ?? 0}；候选池更新 ${candidatesResult.recategorized ?? 0}；停用旧分类 ${taxonomy.deactivatedLegacy ?? 0}`
+      );
+
+      setPage(1);
+      await loadCandidates();
+    } catch (error: any) {
+      console.error('批量重分类失败:', error);
+      message.error(error?.message || '批量重分类失败');
+    } finally {
+      setRunningRecategorize(false);
+    }
+  }
+
   async function reviewCandidate(
     candidate: IngestCandidate,
     action: 'approve' | 'reject' | 'retry',
@@ -425,6 +460,14 @@ export default function IngestDashboardPage() {
               disabled={loading}
             >
               {loading ? '刷新中...' : '刷新候选池'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => void runRecategorizeNow()}
+              disabled={runningRecategorize}
+            >
+              {runningRecategorize ? '重分类中...' : '按新规范重分类'}
             </button>
             <button
               type="button"

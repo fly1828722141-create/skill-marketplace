@@ -486,12 +486,13 @@ function pickCategoryId(options: {
   categories: Array<{ id: string; slug: string; name: string }>;
   title: string;
   summary: string;
+  description?: string;
   tags: string[];
 }): string | null {
-  const { categories, title, summary, tags } = options;
+  const { categories, title, summary, description = '', tags } = options;
   if (!categories.length) return null;
 
-  const searchable = `${title} ${summary} ${tags.join(' ')}`.toLowerCase();
+  const searchable = `${title} ${summary} ${description} ${tags.join(' ')}`.toLowerCase();
   let bestMatch: { categoryId: string; score: number; ruleIndex: number } | null = null;
 
   for (const [ruleIndex, rule] of CATEGORY_RULES.entries()) {
@@ -524,6 +525,22 @@ function pickCategoryId(options: {
   }
 
   return categories[0]?.id || null;
+}
+
+export function resolveCategoryIdByContent(options: {
+  categories: Array<{ id: string; slug: string; name: string }>;
+  title: string;
+  summary?: string | null;
+  description?: string | null;
+  tags?: string[] | null;
+}): string | null {
+  return pickCategoryId({
+    categories: options.categories,
+    title: String(options.title || ''),
+    summary: String(options.summary || ''),
+    description: String(options.description || ''),
+    tags: Array.isArray(options.tags) ? options.tags : [],
+  });
 }
 
 function evaluateCollectionDecision(repo: GitHubRepo): CollectionDecision {
@@ -1045,10 +1062,11 @@ async function publishSingleCandidate(options: {
 
   const categoryId =
     candidate.categoryId ||
-    pickCategoryId({
+    resolveCategoryIdByContent({
       categories: options.categories,
       title: candidate.title,
       summary: candidate.summary || '',
+      description: candidate.description || '',
       tags: candidate.tags,
     });
 
