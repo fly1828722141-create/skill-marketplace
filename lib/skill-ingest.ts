@@ -128,6 +128,360 @@ function buildInstallCommand(repo: GitHubRepo): string {
   return `npx skills add ${repo.html_url}`;
 }
 
+interface CategoryRule {
+  slugs: string[];
+  aliases: string[];
+  keywords: string[];
+}
+
+const CATEGORY_RULES: CategoryRule[] = [
+  {
+    slugs: ['development-coding', 'dev-engineering'],
+    aliases: ['开发工具与编程', '开发与编程', 'development & coding'],
+    keywords: [
+      'code',
+      'coding',
+      'programming',
+      'developer',
+      'refactor',
+      'lint',
+      'sast',
+      'debug',
+      'unit test',
+      'testing',
+      'git',
+      'pull request',
+      'typescript',
+      'javascript',
+      'node',
+      'python',
+      'java',
+      'rust',
+      'golang',
+      'sdk',
+      'api',
+      '代码',
+      '编程',
+      '开发',
+      '重构',
+      '代码审查',
+      '静态分析',
+      '漏洞扫描',
+      '调试',
+      '测试',
+      '版本控制',
+    ],
+  },
+  {
+    slugs: ['data-processing-analytics', 'data-analytics'],
+    aliases: ['数据处理与分析', '数据分析与研究', 'data & analytics'],
+    keywords: [
+      'data',
+      'analytics',
+      'analysis',
+      'database',
+      'sql',
+      'postgres',
+      'mysql',
+      'mongodb',
+      'schema',
+      'etl',
+      'pipeline',
+      'dashboard',
+      'report',
+      'chart',
+      'bi',
+      'recharts',
+      'csv',
+      'json',
+      'pandas',
+      '数据',
+      '数据库',
+      '查询',
+      '分析',
+      '报表',
+      '可视化',
+      '同环比',
+      '数据工程',
+      '数据清洗',
+    ],
+  },
+  {
+    slugs: ['documents-productivity', 'productivity-automation', 'content-writing-translation'],
+    aliases: ['文档与办公', '办公效率与自动化', 'documents & productivity'],
+    keywords: [
+      'document',
+      'doc',
+      'docx',
+      'pdf',
+      'markdown',
+      'word',
+      'excel',
+      'xlsx',
+      'ppt',
+      'pptx',
+      'presentation',
+      'latex',
+      'office',
+      '文档',
+      '办公',
+      '表格',
+      '演示',
+      '幻灯片',
+      '排版',
+      '出版',
+      'markdown',
+    ],
+  },
+  {
+    slugs: ['browser-web'],
+    aliases: ['浏览器与网络', 'browser & web'],
+    keywords: [
+      'browser',
+      'web',
+      'playwright',
+      'puppeteer',
+      'scrape',
+      'scraper',
+      'crawler',
+      'dom',
+      'lighthouse',
+      'frontend test',
+      'api tester',
+      'network monitor',
+      '网页',
+      '浏览器',
+      '抓取',
+      '爬虫',
+      '接口测试',
+      '网络监控',
+      '性能分析',
+      '兼容性',
+    ],
+  },
+  {
+    slugs: ['system-files', 'operations-support'],
+    aliases: ['系统与文件', 'system & files'],
+    keywords: [
+      'filesystem',
+      'file system',
+      'file manager',
+      'shell',
+      'terminal',
+      'bash',
+      'zsh',
+      'linux',
+      'cpu',
+      'memory',
+      'disk',
+      'process',
+      'docker',
+      'kubernetes',
+      'deployment',
+      'ci/cd',
+      'env',
+      '系统',
+      '文件',
+      '目录',
+      '命令行',
+      '脚本',
+      '系统监控',
+      '运维',
+      '部署',
+      '容器',
+    ],
+  },
+  {
+    slugs: ['communication-collaboration', 'operations-support'],
+    aliases: ['通信与协作', 'communication & collaboration', '客服与销售运营'],
+    keywords: [
+      'email',
+      'gmail',
+      'mail',
+      'calendar',
+      'schedule',
+      'slack',
+      'dingtalk',
+      'feishu',
+      'meeting',
+      'transcript',
+      'voice',
+      'customer support',
+      'ticket',
+      '邮件',
+      '日历',
+      '日程',
+      '协作',
+      '沟通',
+      '会议',
+      '语音转写',
+      '纪要',
+      '客服',
+    ],
+  },
+  {
+    slugs: ['search-knowledge', 'data-analytics', 'content-writing-translation'],
+    aliases: ['搜索与知识', 'search & knowledge'],
+    keywords: [
+      'search',
+      'retrieval',
+      'knowledge',
+      'wiki',
+      'notion',
+      'confluence',
+      'arxiv',
+      'scholar',
+      'pubmed',
+      'patent',
+      'obsidian',
+      'notes',
+      'rag',
+      '搜索',
+      '检索',
+      '知识库',
+      '文档查询',
+      '论文',
+      '学术',
+      '笔记',
+      '知识图谱',
+    ],
+  },
+  {
+    slugs: ['media-creativity', 'design-media'],
+    aliases: ['多媒体与创意', '设计与多媒体', 'media & creativity'],
+    keywords: [
+      'image',
+      'video',
+      'audio',
+      'ocr',
+      'ffmpeg',
+      'whisper',
+      'tts',
+      'figma',
+      'design',
+      'ux',
+      'ui',
+      'poster',
+      'subtitle',
+      '图像',
+      '图片',
+      '视频',
+      '音频',
+      '创意',
+      '设计',
+      '海报',
+      '字幕',
+    ],
+  },
+  {
+    slugs: ['third-party-integrations', 'operations-support'],
+    aliases: ['第三方服务集成', 'third-party integrations'],
+    keywords: [
+      'integration',
+      'saas',
+      'salesforce',
+      'hubspot',
+      'jira',
+      'sap',
+      'crm',
+      'erp',
+      'maps',
+      'amap',
+      'google maps',
+      'ecommerce',
+      'shopify',
+      'amazon',
+      'twitter',
+      'instagram',
+      'weibo',
+      '第三方',
+      '集成',
+      '地图',
+      '电商',
+      '社交媒体',
+      '企业 saas',
+    ],
+  },
+  {
+    slugs: ['ai-enhancement-automation', 'productivity-automation'],
+    aliases: ['ai 增强与自动化', 'ai增强与自动化', '办公效率与自动化'],
+    keywords: [
+      'prompt',
+      'workflow',
+      'orchestration',
+      'agent',
+      'autogpt',
+      'fact checker',
+      'moderation',
+      'quality check',
+      'automation',
+      'skill discovery',
+      'install skill',
+      '提示词',
+      '工作流',
+      '编排',
+      '自动化',
+      '质量检查',
+      '事实核查',
+      '技能发现',
+      '技能安装',
+    ],
+  },
+];
+
+function normalizeCategoryKey(input: string): string {
+  return (input || '')
+    .toLowerCase()
+    .replace(/[\s\-_/&+（）()]/g, '')
+    .trim();
+}
+
+function resolveCategoryIdByRule(
+  categories: Array<{ id: string; slug: string; name: string }>,
+  rule: CategoryRule
+): string | null {
+  const slugSet = new Set(rule.slugs.map((item) => item.toLowerCase()));
+  for (const category of categories) {
+    if (slugSet.has((category.slug || '').toLowerCase())) {
+      return category.id;
+    }
+  }
+
+  const normalizedAliases = rule.aliases.map(normalizeCategoryKey).filter(Boolean);
+  for (const category of categories) {
+    const normalizedName = normalizeCategoryKey(category.name || '');
+    if (!normalizedName) continue;
+    if (
+      normalizedAliases.some(
+        (alias) =>
+          normalizedName === alias ||
+          normalizedName.includes(alias) ||
+          alias.includes(normalizedName)
+      )
+    ) {
+      return category.id;
+    }
+  }
+
+  return null;
+}
+
+function scoreCategoryRule(searchable: string, rule: CategoryRule): number {
+  let score = 0;
+  const terms = [...new Set(rule.keywords.map((item) => item.toLowerCase().trim()).filter(Boolean))];
+  for (const term of terms) {
+    if (!searchable.includes(term)) continue;
+    if (term.length >= 10) {
+      score += 3;
+    } else if (term.length >= 5) {
+      score += 2;
+    } else {
+      score += 1;
+    }
+  }
+  return score;
+}
+
 function pickCategoryId(options: {
   categories: Array<{ id: string; slug: string; name: string }>;
   title: string;
@@ -137,42 +491,36 @@ function pickCategoryId(options: {
   const { categories, title, summary, tags } = options;
   if (!categories.length) return null;
 
-  const bySlug = new Map(categories.map((category) => [category.slug, category.id]));
   const searchable = `${title} ${summary} ${tags.join(' ')}`.toLowerCase();
+  let bestMatch: { categoryId: string; score: number; ruleIndex: number } | null = null;
 
-  const rules: Array<{ slug: string; keywords: string[] }> = [
-    {
-      slug: 'productivity-automation',
-      keywords: ['automation', 'agent', 'bot', 'workflow', 'office', 'productivity'],
-    },
-    {
-      slug: 'dev-engineering',
-      keywords: ['dev', 'code', 'sdk', 'api', 'typescript', 'javascript', 'python', 'rust', 'go'],
-    },
-    {
-      slug: 'data-analytics',
-      keywords: ['data', 'analysis', 'analytics', 'ml', 'ai', 'research', 'etl'],
-    },
-    {
-      slug: 'content-writing-translation',
-      keywords: ['content', 'writing', 'translation', 'copywriting', 'seo'],
-    },
-    {
-      slug: 'design-media',
-      keywords: ['design', 'image', 'video', 'media', 'audio', 'illustration', 'ui', 'ux'],
-    },
-    {
-      slug: 'operations-support',
-      keywords: ['support', 'sales', 'ops', 'customer', 'crm', 'ticket'],
-    },
-  ];
-
-  for (const rule of rules) {
-    const categoryId = bySlug.get(rule.slug);
+  for (const [ruleIndex, rule] of CATEGORY_RULES.entries()) {
+    const categoryId = resolveCategoryIdByRule(categories, rule);
     if (!categoryId) continue;
-    if (rule.keywords.some((keyword) => searchable.includes(keyword))) {
-      return categoryId;
+
+    const score = scoreCategoryRule(searchable, rule);
+    if (score <= 0) continue;
+
+    if (
+      !bestMatch ||
+      score > bestMatch.score ||
+      (score === bestMatch.score && ruleIndex < bestMatch.ruleIndex)
+    ) {
+      bestMatch = { categoryId, score, ruleIndex };
     }
+  }
+
+  if (bestMatch) {
+    return bestMatch.categoryId;
+  }
+
+  const othersCategory = categories.find(
+    (category) =>
+      (category.slug || '').toLowerCase() === 'others' ||
+      normalizeCategoryKey(category.name || '') === normalizeCategoryKey('其他')
+  );
+  if (othersCategory) {
+    return othersCategory.id;
   }
 
   return categories[0]?.id || null;

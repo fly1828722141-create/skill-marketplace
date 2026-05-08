@@ -8,13 +8,17 @@ export interface CategoryPreset {
 }
 
 export const DEFAULT_SKILL_CATEGORIES_PRESET: CategoryPreset[] = [
-  { slug: 'productivity-automation', name: '办公效率与自动化', icon: 'office', sortOrder: 10 },
-  { slug: 'dev-engineering', name: '开发与编程', icon: 'dev', sortOrder: 20 },
-  { slug: 'data-analytics', name: '数据分析与研究', icon: 'data', sortOrder: 30 },
-  { slug: 'content-writing-translation', name: '内容写作与营销', icon: 'content', sortOrder: 40 },
-  { slug: 'design-media', name: '设计与多媒体', icon: 'image', sortOrder: 50 },
-  { slug: 'operations-support', name: '客服与销售运营', icon: 'biz', sortOrder: 60 },
-  { slug: 'others', name: '其他', icon: 'generic', sortOrder: 70 },
+  { slug: 'development-coding', name: '开发工具与编程', icon: 'dev', sortOrder: 10 },
+  { slug: 'data-processing-analytics', name: '数据处理与分析', icon: 'data', sortOrder: 20 },
+  { slug: 'documents-productivity', name: '文档与办公', icon: 'office', sortOrder: 30 },
+  { slug: 'browser-web', name: '浏览器与网络', icon: 'biz', sortOrder: 40 },
+  { slug: 'system-files', name: '系统与文件', icon: 'dev', sortOrder: 50 },
+  { slug: 'communication-collaboration', name: '通信与协作', icon: 'content', sortOrder: 60 },
+  { slug: 'search-knowledge', name: '搜索与知识', icon: 'data', sortOrder: 70 },
+  { slug: 'media-creativity', name: '多媒体与创意', icon: 'image', sortOrder: 80 },
+  { slug: 'third-party-integrations', name: '第三方服务集成', icon: 'biz', sortOrder: 90 },
+  { slug: 'ai-enhancement-automation', name: 'AI 增强与自动化', icon: 'office', sortOrder: 100 },
+  { slug: 'others', name: '其他', icon: 'generic', sortOrder: 110 },
 ];
 
 export function getFallbackSkillCategories(): SkillCategory[] {

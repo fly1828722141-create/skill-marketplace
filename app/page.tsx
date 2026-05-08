@@ -25,6 +25,17 @@ interface SiteOverview {
 }
 
 const CATEGORY_ICON: Record<string, { icon: IconKind; color: string }> = {
+  开发工具与编程: { icon: 'dev', color: 'orange' },
+  数据处理与分析: { icon: 'data', color: 'blue' },
+  文档与办公: { icon: 'office', color: 'green' },
+  浏览器与网络: { icon: 'data', color: 'teal' },
+  系统与文件: { icon: 'dev', color: 'orange' },
+  通信与协作: { icon: 'marketing', color: 'teal' },
+  搜索与知识: { icon: 'content', color: 'green' },
+  多媒体与创意: { icon: 'image', color: 'pink' },
+  第三方服务集成: { icon: 'marketing', color: 'teal' },
+  'AI 增强与自动化': { icon: 'office', color: 'purple' },
+  AI增强与自动化: { icon: 'office', color: 'purple' },
   数据分析与研究: { icon: 'data', color: 'blue' },
   '数据分析与 BI': { icon: 'data', color: 'blue' },
   内容写作与营销: { icon: 'content', color: 'purple' },
