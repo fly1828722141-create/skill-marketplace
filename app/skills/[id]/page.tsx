@@ -502,11 +502,6 @@ export default function SkillDetailPage() {
                 {skill.category?.name || '未分类'}
               </CapabilityMetaItem>
             </div>
-            <div className="capability-panel-grid">
-              <CapabilityPanel title="适用场景" items={capabilityContent.panels.useCases} />
-              <CapabilityPanel title="适用人群" items={capabilityContent.panels.audience} />
-              <CapabilityPanel title="快速上手建议" items={capabilityContent.panels.quickStart} />
-            </div>
             <DocRenderer blocks={capabilityContent.docBlocks} />
           </div>
 
@@ -936,48 +931,6 @@ export default function SkillDetailPage() {
           color: #6f87a3;
         }
 
-        .capability-panel-grid {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 10px;
-          margin-bottom: 14px;
-        }
-
-        .capability-panel {
-          border-radius: 14px;
-          border: 1px solid rgba(17, 73, 132, 0.14);
-          background: linear-gradient(
-            165deg,
-            rgba(255, 255, 255, 0.95) 0%,
-            rgba(241, 248, 255, 0.9) 100%
-          );
-          padding: 12px 14px;
-          min-height: 128px;
-          display: grid;
-          align-content: start;
-          gap: 8px;
-        }
-
-        .capability-panel h4 {
-          margin: 0;
-          font-size: 14px;
-          color: #123c68;
-          letter-spacing: 0.2px;
-        }
-
-        .capability-panel ul {
-          margin: 0;
-          padding-left: 18px;
-          display: grid;
-          gap: 5px;
-        }
-
-        .capability-panel li {
-          color: #27476c;
-          font-size: 13px;
-          line-height: 1.55;
-        }
-
         .action-card,
         .author-card {
           background: rgba(255, 255, 255, 0.9);
@@ -1096,20 +1049,6 @@ export default function SkillDetailPage() {
             gap: 8px;
           }
 
-          .capability-panel-grid {
-            grid-template-columns: 1fr;
-            gap: 8px;
-          }
-
-          .capability-panel {
-            min-height: 0;
-            padding: 11px 12px;
-          }
-
-          .capability-panel li {
-            font-size: 12px;
-          }
-
           .capability-meta-card {
             min-height: 62px;
             padding: 9px 10px;
@@ -1141,21 +1080,6 @@ function CapabilityMetaItem({
       <div className="capability-meta-label">{label}</div>
       <div className="capability-meta-value">{children}</div>
     </div>
-  );
-}
-
-function CapabilityPanel({ title, items }: { title: string; items: string[] }) {
-  if (!items.length) return null;
-
-  return (
-    <section className="capability-panel">
-      <h4>{title}</h4>
-      <ul>
-        {items.map((item, index) => (
-          <li key={`${title}-${index}`}>{item}</li>
-        ))}
-      </ul>
-    </section>
   );
 }
 
