@@ -57,8 +57,11 @@ const DEFAULT_LICENSE_ALLOWLIST = [
 ];
 
 const DEFAULT_DISCOVER_SORTS: DiscoverSort[] = ['updated', 'stars'];
+const DEFAULT_EXTERNAL_SOURCES = ['skills.sh'];
+const DEFAULT_SKILLS_SH_VIEWS: SkillsShView[] = ['all-time', 'trending', 'hot'];
 
 export type DiscoverSort = 'updated' | 'stars';
+export type SkillsShView = 'all-time' | 'trending' | 'hot';
 
 export interface IngestQualityWeights {
   stars: number;
@@ -75,6 +78,8 @@ export interface SkillIngestConfig {
   discoverPerQuery: number;
   discoverMaxPagesPerQuery: number;
   discoverMaxCandidates: number;
+  externalSources: string[];
+  externalMaxCandidates: number;
   autopublishEnabled: boolean;
   publishBatchSize: number;
   minStars: number;
@@ -91,6 +96,15 @@ export interface SkillIngestConfig {
   reviveRejectedMinForks: number;
   reviveRejectedDeltaStars: number;
   reviveRejectedDeltaForks: number;
+  skillsShEnabled: boolean;
+  skillsShApiBase: string;
+  skillsShApiKey: string;
+  skillsShViews: SkillsShView[];
+  skillsShPerPage: number;
+  skillsShMaxPages: number;
+  skillsShPreferApi: boolean;
+  skillsShRequestTimeoutMs: number;
+  skillsShIncludeNonGithub: boolean;
   adminEmail: string;
   cronSecret: string;
   hmacSecret: string;
@@ -103,6 +117,23 @@ function readDiscoverSorts(name: string, fallback: DiscoverSort[]): DiscoverSort
   for (const item of raw) {
     const normalized = item.trim().toLowerCase();
     if (normalized !== 'updated' && normalized !== 'stars') {
+      continue;
+    }
+    if (result.includes(normalized)) {
+      continue;
+    }
+    result.push(normalized);
+  }
+
+  return result.length > 0 ? result : fallback;
+}
+
+function readSkillsShViews(name: string, fallback: SkillsShView[]): SkillsShView[] {
+  const raw = readCsv(name, fallback);
+  const result: SkillsShView[] = [];
+  for (const item of raw) {
+    const normalized = item.trim().toLowerCase();
+    if (normalized !== 'all-time' && normalized !== 'trending' && normalized !== 'hot') {
       continue;
     }
     if (result.includes(normalized)) {
@@ -128,6 +159,13 @@ export function getSkillIngestConfig(): SkillIngestConfig {
     discoverMaxCandidates: readInt('INGEST_DISCOVER_MAX_CANDIDATES', 80, {
       min: 5,
       max: 500,
+    }),
+    externalSources: readCsv('INGEST_EXTERNAL_SOURCES', DEFAULT_EXTERNAL_SOURCES).map((source) =>
+      source.toLowerCase()
+    ),
+    externalMaxCandidates: readInt('INGEST_EXTERNAL_MAX_CANDIDATES', 120, {
+      min: 0,
+      max: 5000,
     }),
     autopublishEnabled: readBool('INGEST_AUTOPUBLISH_ENABLED', false),
     publishBatchSize: readInt('INGEST_PUBLISH_BATCH_SIZE', 20, { min: 1, max: 200 }),
@@ -165,6 +203,21 @@ export function getSkillIngestConfig(): SkillIngestConfig {
       min: 0,
       max: 200000,
     }),
+    skillsShEnabled: readBool('INGEST_SKILLS_SH_ENABLED', true),
+    skillsShApiBase: readEnv('INGEST_SKILLS_SH_API_BASE', 'https://skills.sh/api/v1').replace(
+      /\/+$/,
+      ''
+    ),
+    skillsShApiKey: readEnv('INGEST_SKILLS_SH_API_KEY'),
+    skillsShViews: readSkillsShViews('INGEST_SKILLS_SH_VIEWS', DEFAULT_SKILLS_SH_VIEWS),
+    skillsShPerPage: readInt('INGEST_SKILLS_SH_PER_PAGE', 200, { min: 1, max: 500 }),
+    skillsShMaxPages: readInt('INGEST_SKILLS_SH_MAX_PAGES', 5, { min: 1, max: 200 }),
+    skillsShPreferApi: readBool('INGEST_SKILLS_SH_PREFER_API', true),
+    skillsShRequestTimeoutMs: readInt('INGEST_SKILLS_SH_TIMEOUT_MS', 15000, {
+      min: 3000,
+      max: 120000,
+    }),
+    skillsShIncludeNonGithub: readBool('INGEST_SKILLS_SH_INCLUDE_NON_GITHUB', false),
     adminEmail: readEnv('INGEST_ADMIN_EMAIL', DASHBOARD_OWNER_EMAIL).toLowerCase(),
     cronSecret: readEnv('VERCEL_CRON_SECRET') || readEnv('CRON_SECRET'),
     hmacSecret: readEnv('INGEST_HMAC_SECRET'),

@@ -137,6 +137,13 @@ function formatScore(value?: number): string {
   return value.toFixed(2);
 }
 
+function formatSourceLabel(source: string): string {
+  const normalized = String(source || '').trim().toLowerCase();
+  if (normalized === 'skills.sh') return 'skills.sh';
+  if (normalized === 'github') return 'GitHub';
+  return source || '未知来源';
+}
+
 export default function IngestDashboardPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -450,7 +457,7 @@ export default function IngestDashboardPage() {
     <div className="dashboard-page ingest-page management-center-page">
       <ManagementCenterHeader
         sectionTitle="收录审核台"
-        sectionDescription="管理 GitHub 候选池，按质量分排序审批，通过后发布到线上。"
+        sectionDescription="管理 GitHub 与外部来源候选池，按质量分排序审批，通过后发布到线上。"
         actions={
           <div className="dashboard-inline-actions ingest-header-actions">
             <button
@@ -673,6 +680,7 @@ export default function IngestDashboardPage() {
                           >
                             {candidate.repoFullName}
                           </a>
+                          <span className="ingest-source-pill">{formatSourceLabel(candidate.source)}</span>
                           <span className={buildStatusClass(candidate.status)}>{statusText}</span>
                         </div>
                         {candidate.summary ? <p className="ingest-summary-text">{candidate.summary}</p> : null}
@@ -684,6 +692,10 @@ export default function IngestDashboardPage() {
                           <span>⭐ {formatNumber(candidate.stars || 0)}</span>
                           <span>Fork {formatNumber(candidate.forks || 0)}</span>
                           <span>Issue {formatNumber(candidate.openIssues || 0)}</span>
+                          <span>
+                            {candidate.source === 'skills.sh' ? 'Installs' : 'Watch'}{' '}
+                            {formatNumber(candidate.watchers || 0)}
+                          </span>
                           <span>语言 {candidate.language || '未知'}</span>
                           <span>License {candidate.licenseKey || '未知'}</span>
                         </div>

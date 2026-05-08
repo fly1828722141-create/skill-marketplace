@@ -3,6 +3,7 @@ import { recordEvent } from '@/lib/event-log';
 import { ensureDefaultCategories } from '@/lib/skill-categories';
 import { getSkillIngestConfig, type DiscoverSort } from '@/lib/ingest-config';
 import { parseSkillLinkInput } from '@/lib/skill-link-input';
+import { fetchSkillsShSkills, type SkillsShSkillItem } from '@/lib/skills-sh-source';
 import { toPrismaTagsValue } from '@/lib/tags';
 
 interface IngestRunContext {
@@ -55,6 +56,7 @@ export interface DiscoveryResult {
   exhausted: boolean;
   queryHealth: DiscoveryQueryHealth[];
   queryCoverage: DiscoveryQueryCoverage[];
+  sourceStats: DiscoverySourceStats[];
 }
 
 export interface PublishOptions extends IngestRunContext {
@@ -111,6 +113,20 @@ export interface DiscoveryQueryCoverage {
   invalid: number;
 }
 
+export interface DiscoverySourceStats {
+  source: string;
+  mode: string;
+  fetched: number;
+  scanned: number;
+  inserted: number;
+  updated: number;
+  qualityFiltered: number;
+  duplicates: number;
+  invalid: number;
+  skipped: number;
+  errors: string[];
+}
+
 function uniqueStrings(items: Array<string | null | undefined>, max = 10): string[] {
   const result: string[] = [];
   for (const raw of items) {
@@ -158,6 +174,50 @@ function buildDescription(repo: GitHubRepo): string {
 
 function buildInstallCommand(repo: GitHubRepo): string {
   return `npx skills add ${repo.html_url}`;
+}
+
+function isGitHubRepoSpec(input: string): boolean {
+  return /^[a-z0-9._-]+\/[a-z0-9._-]+$/i.test((input || '').trim());
+}
+
+function normalizeExternalId(input: string): string {
+  return String(input || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._/-]+/g, '-')
+    .replace(/-+/g, '-');
+}
+
+function installsToPseudoStars(installs: number): number {
+  const value = Math.max(0, Number(installs || 0));
+  if (value <= 0) return 0;
+  return Math.round(Math.log10(value + 1) * 120);
+}
+
+function buildSkillsShInstallCommand(item: SkillsShSkillItem): string {
+  const sourceRef = isGitHubRepoSpec(item.source)
+    ? item.source
+    : item.installUrl || item.source;
+  return `npx skills add ${sourceRef} --skill ${item.skillId}`;
+}
+
+function buildSkillsShDescription(item: SkillsShSkillItem, repo: GitHubRepo | null): string {
+  const lines = [
+    `自动收录来源：https://skills.sh/${item.source}/${item.skillId}`,
+    '',
+    repo?.description || `${item.name}（来自 skills.sh 收录榜单）`,
+    '',
+    `skills.sh installs: ${item.installs}`,
+    `skills.sh 视图: ${item.view}`,
+    `skills.sh 官方: ${item.isOfficial ? 'yes' : 'no'}`,
+    `GitHub Repo: ${repo?.full_name || item.source}`,
+    `GitHub Stars: ${repo?.stargazers_count ?? 'Unknown'}`,
+    `GitHub Forks: ${repo?.forks_count ?? 'Unknown'}`,
+    `Language: ${repo?.language || 'Unknown'}`,
+    `License: ${repo?.license?.key || 'Unknown'}`,
+  ];
+
+  return lines.join('\n').slice(0, 4000);
 }
 
 interface CategoryRule {
@@ -575,17 +635,24 @@ export function resolveCategoryIdByContent(options: {
   });
 }
 
-function evaluateCollectionDecision(repo: GitHubRepo): CollectionDecision {
+function evaluateCollectionDecisionByMetrics(input: {
+  archived: boolean;
+  disabled: boolean;
+  stars: number;
+  forks: number;
+  licenseKey: string | null;
+  pushedAt: Date | string | null;
+}): CollectionDecision {
   const config = getSkillIngestConfig();
 
-  if (repo.archived || repo.disabled) {
+  if (input.archived || input.disabled) {
     return {
       allow: false,
       reason: '仓库已归档或禁用',
     };
   }
 
-  const stars = Number(repo.stargazers_count || 0);
+  const stars = Number(input.stars || 0);
   if (stars < config.minStars) {
     return {
       allow: false,
@@ -593,7 +660,7 @@ function evaluateCollectionDecision(repo: GitHubRepo): CollectionDecision {
     };
   }
 
-  const forks = Number(repo.forks_count || 0);
+  const forks = Number(input.forks || 0);
   if (forks < config.minForks) {
     return {
       allow: false,
@@ -602,7 +669,7 @@ function evaluateCollectionDecision(repo: GitHubRepo): CollectionDecision {
   }
 
   if (config.requireLicense) {
-    const license = (repo.license?.key || '').toLowerCase();
+    const license = (input.licenseKey || '').toLowerCase();
     if (!license) {
       return {
         allow: false,
@@ -618,8 +685,8 @@ function evaluateCollectionDecision(repo: GitHubRepo): CollectionDecision {
     }
   }
 
-  if (repo.pushed_at) {
-    const pushedAt = new Date(repo.pushed_at);
+  if (input.pushedAt) {
+    const pushedAt = input.pushedAt instanceof Date ? input.pushedAt : new Date(input.pushedAt);
     if (!Number.isNaN(pushedAt.getTime())) {
       const inactiveDays =
         (Date.now() - pushedAt.getTime()) / (1000 * 60 * 60 * 24);
@@ -641,6 +708,17 @@ function evaluateCollectionDecision(repo: GitHubRepo): CollectionDecision {
     allow: true,
     reason: '命中收录规则',
   };
+}
+
+function evaluateCollectionDecision(repo: GitHubRepo): CollectionDecision {
+  return evaluateCollectionDecisionByMetrics({
+    archived: Boolean(repo.archived),
+    disabled: Boolean(repo.disabled),
+    stars: Number(repo.stargazers_count || 0),
+    forks: Number(repo.forks_count || 0),
+    licenseKey: repo.license?.key?.toLowerCase() || null,
+    pushedAt: repo.pushed_at,
+  });
 }
 
 function evaluateRejectedRevive(options: {
@@ -758,6 +836,20 @@ function evaluateAutoDecision(candidate: {
   };
 }
 
+function buildGitHubRequestHeaders(token: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'skill-marketplace-ingest',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  return headers;
+}
+
 async function requestGitHubSearch(
   query: string,
   perPage: number,
@@ -773,19 +865,9 @@ async function requestGitHubSearch(
     page: String(page),
   });
 
-  const headers: Record<string, string> = {
-    Accept: 'application/vnd.github+json',
-    'User-Agent': 'skill-marketplace-ingest',
-    'X-GitHub-Api-Version': '2022-11-28',
-  };
-
-  if (config.githubToken) {
-    headers.Authorization = `Bearer ${config.githubToken}`;
-  }
-
   const response = await fetch(`${config.githubApiBase}/search/repositories?${params.toString()}`, {
     method: 'GET',
-    headers,
+    headers: buildGitHubRequestHeaders(config.githubToken),
     signal: AbortSignal.timeout(15000),
   });
 
@@ -796,6 +878,34 @@ async function requestGitHubSearch(
 
   const json = (await response.json()) as GitHubSearchResponse;
   return json;
+}
+
+async function requestGitHubRepo(fullName: string): Promise<GitHubRepo | null> {
+  if (!fullName) return null;
+
+  const config = getSkillIngestConfig();
+  const normalized = fullName.trim().replace(/^\/+|\/+$/g, '');
+  const encoded = normalized
+    .split('/')
+    .map((item) => encodeURIComponent(item))
+    .join('/');
+
+  const response = await fetch(`${config.githubApiBase}/repos/${encoded}`, {
+    method: 'GET',
+    headers: buildGitHubRequestHeaders(config.githubToken),
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`GitHub 仓库查询失败(${response.status}): ${body.slice(0, 180)}`);
+  }
+
+  return (await response.json()) as GitHubRepo;
 }
 
 async function createIngestRun(options: {
@@ -986,6 +1096,294 @@ async function upsertCandidateFromRepo(repo: GitHubRepo): Promise<'inserted' | '
     data: updateData,
   });
   return 'updated';
+}
+
+async function findExistingSkillIdByInstall(options: {
+  installCommand: string;
+  sourceUrl?: string | null;
+  repoUrl?: string | null;
+}): Promise<string | null> {
+  const parsed = parseSkillLinkInput(
+    options.installCommand || options.sourceUrl || options.repoUrl || ''
+  );
+
+  const conditions: Array<{ fileName: string }> = [];
+  if (parsed?.storageValue) {
+    conditions.push({ fileName: parsed.storageValue });
+  }
+  if (options.sourceUrl) {
+    conditions.push({ fileName: options.sourceUrl });
+  }
+  if (options.repoUrl) {
+    conditions.push({ fileName: options.repoUrl });
+  }
+
+  if (conditions.length === 0) {
+    return null;
+  }
+
+  const existing = await prisma.skill.findFirst({
+    where: {
+      OR: conditions,
+      status: {
+        in: ['active', 'archived'],
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  return existing?.id || null;
+}
+
+async function upsertCandidateFromSkillsSh(
+  item: SkillsShSkillItem,
+  repo: GitHubRepo | null
+): Promise<'inserted' | 'updated'> {
+  const sourceId = `${normalizeExternalId(item.source)}/${normalizeExternalId(item.skillId)}`;
+  const dedupeKey = `skills.sh:${sourceId}`;
+  const installCommand = buildSkillsShInstallCommand(item);
+  const repoUrl = repo?.html_url || item.installUrl || item.url;
+  const sourceUrl = item.url;
+  const now = new Date();
+
+  const stars = Math.max(Number(repo?.stargazers_count || 0), installsToPseudoStars(item.installs));
+  const forks = Number(repo?.forks_count || 0);
+  const watchers = Math.max(Number(repo?.watchers_count || 0), Number(item.installs || 0));
+  const pushedAt = repo?.pushed_at ? new Date(repo.pushed_at) : now;
+  const existingSkillId = await findExistingSkillIdByInstall({
+    installCommand,
+    sourceUrl,
+    repoUrl,
+  });
+
+  const title = (item.name || item.skillId || item.source).trim().slice(0, 120);
+  const summary = normalizeSummary(
+    repo?.description || '',
+    `自动收录自 skills.sh · ${item.source}/${item.skillId}`
+  );
+  const description = buildSkillsShDescription(item, repo);
+  const tags = uniqueStrings(
+    [
+      repo?.language,
+      ...(Array.isArray(repo?.topics) ? repo?.topics : []),
+      item.view,
+      item.sourceType,
+      item.isOfficial ? 'official' : 'community',
+      'skills-sh',
+      'auto-ingest',
+    ],
+    12
+  );
+
+  const data = {
+    source: 'skills.sh',
+    sourceId,
+    dedupeKey,
+    repoFullName: repo?.full_name || item.source,
+    repoUrl,
+    sourceUrl,
+    installCommand,
+    title,
+    summary,
+    description,
+    tags,
+    licenseKey: repo?.license?.key?.toLowerCase() || null,
+    language: repo?.language || null,
+    pushedAt,
+    stars,
+    forks,
+    watchers,
+    openIssues: Number(repo?.open_issues_count || 0),
+    archived: Boolean(repo?.archived),
+    disabled: Boolean(repo?.disabled),
+    lastSeenAt: now,
+  };
+
+  const existing = await prisma.ingestCandidate.findFirst({
+    where: {
+      source: 'skills.sh',
+      OR: [{ sourceId }, { dedupeKey }, { sourceUrl }],
+    },
+    select: {
+      id: true,
+      status: true,
+      stars: true,
+      forks: true,
+    },
+  });
+
+  if (!existing) {
+    await prisma.ingestCandidate.create({
+      data: {
+        ...data,
+        status: existingSkillId ? 'published' : 'pending',
+        autoDecision: existingSkillId ? 'allow' : null,
+        autoDecisionNote: existingSkillId ? '已存在同源 Skill，自动标记已发布' : null,
+        publishedSkillId: existingSkillId || null,
+        publishedAt: existingSkillId ? now : null,
+        failureReason: null,
+        discoveredAt: now,
+      },
+    });
+    return 'inserted';
+  }
+
+  const updateData: Record<string, unknown> = {
+    ...data,
+  };
+
+  if (existingSkillId) {
+    updateData.status = 'published';
+    updateData.autoDecision = 'allow';
+    updateData.autoDecisionNote = '已存在同源 Skill，自动标记已发布';
+    updateData.publishedSkillId = existingSkillId;
+    updateData.publishedAt = now;
+    updateData.failureReason = null;
+  } else {
+    const reviveDecision = evaluateRejectedRevive({
+      previousStatus: existing.status,
+      previousStars: Number(existing.stars || 0),
+      previousForks: Number(existing.forks || 0),
+      nextStars: data.stars,
+      nextForks: data.forks,
+    });
+
+    if (existing.status === 'failed' || reviveDecision.revive) {
+      updateData.status = 'pending';
+      updateData.failureReason = null;
+      updateData.autoDecisionNote = reviveDecision.note || null;
+    } else {
+      updateData.status = existing.status;
+      updateData.failureReason = undefined;
+    }
+
+    updateData.autoDecision = null;
+    if (!reviveDecision.revive) {
+      updateData.autoDecisionNote = null;
+    }
+  }
+
+  await prisma.ingestCandidate.update({
+    where: { id: existing.id },
+    data: updateData,
+  });
+  return 'updated';
+}
+
+async function runSkillsShDiscovery(options: {
+  seen: Set<string>;
+  maxCandidates: number;
+}): Promise<DiscoverySourceStats> {
+  const config = getSkillIngestConfig();
+  const stats: DiscoverySourceStats = {
+    source: 'skills.sh',
+    mode: 'none',
+    fetched: 0,
+    scanned: 0,
+    inserted: 0,
+    updated: 0,
+    qualityFiltered: 0,
+    duplicates: 0,
+    invalid: 0,
+    skipped: 0,
+    errors: [],
+  };
+
+  if (!config.externalSources.includes('skills.sh')) {
+    return stats;
+  }
+  if (options.maxCandidates <= 0) {
+    return stats;
+  }
+
+  const fetched = await fetchSkillsShSkills();
+  stats.mode = fetched.mode;
+  stats.errors = fetched.errors.slice(0, 20);
+  stats.fetched = fetched.items.length;
+
+  if (!fetched.items.length) {
+    return stats;
+  }
+
+  const repoCache = new Map<string, GitHubRepo | null>();
+  for (const item of fetched.items) {
+    if (stats.scanned >= options.maxCandidates) {
+      break;
+    }
+
+    const key = `skills.sh:${normalizeExternalId(item.source)}:${normalizeExternalId(item.skillId)}`;
+    if (options.seen.has(key)) {
+      stats.duplicates += 1;
+      stats.skipped += 1;
+      continue;
+    }
+    options.seen.add(key);
+
+    if (!item.source || !item.skillId) {
+      stats.invalid += 1;
+      stats.skipped += 1;
+      continue;
+    }
+    if (item.isDuplicate) {
+      stats.duplicates += 1;
+      stats.skipped += 1;
+      continue;
+    }
+    if (!config.skillsShIncludeNonGithub && !isGitHubRepoSpec(item.source)) {
+      stats.invalid += 1;
+      stats.skipped += 1;
+      continue;
+    }
+
+    let repo: GitHubRepo | null = null;
+    if (isGitHubRepoSpec(item.source)) {
+      if (repoCache.has(item.source)) {
+        repo = repoCache.get(item.source) || null;
+      } else {
+        try {
+          repo = await requestGitHubRepo(item.source);
+        } catch (error: any) {
+          if (stats.errors.length < 20) {
+            stats.errors.push(
+              `[repo:${item.source}] ${(error?.message || 'github request failed').slice(0, 160)}`
+            );
+          }
+          repo = null;
+        }
+        repoCache.set(item.source, repo);
+      }
+    }
+
+    const stars = Math.max(Number(repo?.stargazers_count || 0), installsToPseudoStars(item.installs));
+    const forks = Number(repo?.forks_count || 0);
+    const collectionDecision = evaluateCollectionDecisionByMetrics({
+      archived: Boolean(repo?.archived),
+      disabled: Boolean(repo?.disabled),
+      stars,
+      forks,
+      licenseKey: repo?.license?.key?.toLowerCase() || null,
+      pushedAt: repo?.pushed_at || new Date(),
+    });
+
+    stats.scanned += 1;
+
+    if (!collectionDecision.allow) {
+      stats.qualityFiltered += 1;
+      continue;
+    }
+
+    const result = await upsertCandidateFromSkillsSh(item, repo);
+    if (result === 'inserted') {
+      stats.inserted += 1;
+    }
+    if (result === 'updated') {
+      stats.updated += 1;
+    }
+  }
+
+  return stats;
 }
 
 async function ensureIngestAdminUser(): Promise<{ id: string; email: string }> {
@@ -1254,6 +1652,9 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
   const perQuery = options.perQuery || config.discoverPerQuery;
   const maxPagesPerQuery = options.maxPagesPerQuery || config.discoverMaxPagesPerQuery;
   const maxCandidates = options.maxCandidates || config.discoverMaxCandidates;
+  const externalSources = [...new Set(config.externalSources)].filter(Boolean);
+  const externalMaxCandidates = config.externalMaxCandidates;
+  const totalCandidateLimit = maxCandidates + externalMaxCandidates;
   const targets = normalizedQueries.flatMap((query) =>
     normalizedSorts.map((sort) => ({ query, sort }))
   );
@@ -1268,6 +1669,8 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
       perQuery,
       maxPagesPerQuery,
       maxCandidates,
+      externalSources,
+      externalMaxCandidates,
       schedule: 'round-robin-query-sort',
     }),
   });
@@ -1282,6 +1685,7 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
     const seen = new Set<string>();
     const exhaustedTargetIndex = new Set<number>();
     const queryHealthMap = new Map<string, DiscoveryQueryHealth>();
+    const sourceStats: DiscoverySourceStats[] = [];
 
     for (let page = 1; page <= maxPagesPerQuery; page += 1) {
       if (seen.size >= maxCandidates) break;
@@ -1324,7 +1728,7 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
         for (const repo of items) {
           if (seen.size >= maxCandidates) break;
 
-          const key = String(repo.id);
+          const key = `github:${String(repo.id)}`;
           if (seen.has(key)) {
             skippedCount += 1;
             health.duplicates += 1;
@@ -1414,22 +1818,44 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
       return right.scanned - left.scanned;
     });
 
+    if (externalSources.includes('skills.sh') && externalMaxCandidates > 0) {
+      const skillsShStats = await runSkillsShDiscovery({
+        seen,
+        maxCandidates: externalMaxCandidates,
+      });
+
+      scannedCount += skillsShStats.scanned;
+      insertedCount += skillsShStats.inserted;
+      updatedCount += skillsShStats.updated;
+      skippedCount += skillsShStats.skipped;
+      qualityFilteredCount += skillsShStats.qualityFiltered;
+      sourceStats.push(skillsShStats);
+    }
+
+    const externalSummary =
+      sourceStats.length > 0
+        ? `；外部来源新增 ${sourceStats.reduce((sum, item) => sum + item.inserted, 0)}，更新 ${sourceStats.reduce((sum, item) => sum + item.updated, 0)}`
+        : '';
+
     await finishIngestRun(run.id, {
       status: 'success',
       scannedCount,
       insertedCount,
       updatedCount,
       skippedCount,
-      message: `扫描 ${scannedCount} 条，质量过滤 ${qualityFilteredCount}，新增 ${insertedCount}，更新 ${updatedCount}`,
+      message: `扫描 ${scannedCount} 条，质量过滤 ${qualityFilteredCount}，新增 ${insertedCount}，更新 ${updatedCount}${externalSummary}`,
       querySnapshot: JSON.stringify({
         queries: normalizedQueries,
         sorts: normalizedSorts,
         perQuery,
         maxPagesPerQuery,
         maxCandidates,
+        externalSources,
+        externalMaxCandidates,
         schedule: 'round-robin-query-sort',
         queryHealth,
         queryCoverage,
+        sourceStats,
       }),
     });
 
@@ -1441,9 +1867,10 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
       skippedCount,
       qualityFilteredCount,
       totalCandidates: seen.size,
-      exhausted: seen.size >= maxCandidates,
+      exhausted: seen.size >= totalCandidateLimit,
       queryHealth,
       queryCoverage,
+      sourceStats,
     };
   } catch (error: any) {
     await finishIngestRun(run.id, {

@@ -2770,6 +2770,16 @@ button {
   font-size: 13px;
 }
 
+.ingest-source-pill {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  background: rgba(15, 23, 42, 0.06);
+  color: #334155;
+}
+
 .ingest-summary-text {
   margin: 0 0 6px;
   color: var(--text-secondary);
