@@ -595,6 +595,14 @@ export default function IngestDashboardPage() {
             <button
               type="button"
               className="btn btn-secondary"
+              onClick={() => void runRecategorizeNow()}
+              disabled={runningRecategorize}
+            >
+              {runningRecategorize ? '重分类中...' : '按新规范重分类'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
               onClick={() => setDraftWeights(normalizeWeights(draftWeights))}
             >
               归一化草稿
