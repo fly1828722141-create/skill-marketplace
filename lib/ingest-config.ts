@@ -81,6 +81,11 @@ export interface SkillIngestConfig {
   maxInactivityDays: number;
   requireLicense: boolean;
   allowedLicenses: string[];
+  reviveRejectedEnabled: boolean;
+  reviveRejectedMinStars: number;
+  reviveRejectedMinForks: number;
+  reviveRejectedDeltaStars: number;
+  reviveRejectedDeltaForks: number;
   adminEmail: string;
   cronSecret: string;
   hmacSecret: string;
@@ -120,6 +125,23 @@ export function getSkillIngestConfig(): SkillIngestConfig {
     allowedLicenses: readCsv('INGEST_ALLOWED_LICENSES', DEFAULT_LICENSE_ALLOWLIST).map((key) =>
       key.toLowerCase()
     ),
+    reviveRejectedEnabled: readBool('INGEST_REVIVE_REJECTED_ENABLED', true),
+    reviveRejectedMinStars: readInt('INGEST_REVIVE_REJECTED_MIN_STARS', 60, {
+      min: 0,
+      max: 200000,
+    }),
+    reviveRejectedMinForks: readInt('INGEST_REVIVE_REJECTED_MIN_FORKS', 5, {
+      min: 0,
+      max: 200000,
+    }),
+    reviveRejectedDeltaStars: readInt('INGEST_REVIVE_REJECTED_DELTA_STARS', 20, {
+      min: 0,
+      max: 200000,
+    }),
+    reviveRejectedDeltaForks: readInt('INGEST_REVIVE_REJECTED_DELTA_FORKS', 3, {
+      min: 0,
+      max: 200000,
+    }),
     adminEmail: readEnv('INGEST_ADMIN_EMAIL', DASHBOARD_OWNER_EMAIL).toLowerCase(),
     cronSecret: readEnv('VERCEL_CRON_SECRET') || readEnv('CRON_SECRET'),
     hmacSecret: readEnv('INGEST_HMAC_SECRET'),

@@ -79,6 +79,11 @@ interface CollectionDecision {
   reason: string;
 }
 
+interface RejectedReviveDecision {
+  revive: boolean;
+  note?: string;
+}
+
 function uniqueStrings(items: Array<string | null | undefined>, max = 10): string[] {
   const result: string[] = [];
   for (const raw of items) {
@@ -611,6 +616,42 @@ function evaluateCollectionDecision(repo: GitHubRepo): CollectionDecision {
   };
 }
 
+function evaluateRejectedRevive(options: {
+  previousStatus: string;
+  previousStars: number;
+  previousForks: number;
+  nextStars: number;
+  nextForks: number;
+}): RejectedReviveDecision {
+  const config = getSkillIngestConfig();
+  if (!config.reviveRejectedEnabled) {
+    return { revive: false };
+  }
+
+  if (options.previousStatus !== 'rejected') {
+    return { revive: false };
+  }
+
+  const starDelta = Math.max(0, options.nextStars - options.previousStars);
+  const forkDelta = Math.max(0, options.nextForks - options.previousForks);
+
+  const reachedAbsoluteThreshold =
+    options.nextStars >= config.reviveRejectedMinStars ||
+    options.nextForks >= config.reviveRejectedMinForks;
+  const reachedGrowthThreshold =
+    starDelta >= config.reviveRejectedDeltaStars ||
+    forkDelta >= config.reviveRejectedDeltaForks;
+
+  if (!reachedAbsoluteThreshold && !reachedGrowthThreshold) {
+    return { revive: false };
+  }
+
+  return {
+    revive: true,
+    note: `历史拒绝后热度提升，自动恢复待处理（Star ${options.previousStars}→${options.nextStars}，Fork ${options.previousForks}→${options.nextForks}）`,
+  };
+}
+
 function evaluateAutoDecision(candidate: {
   status: string;
   archived: boolean;
@@ -854,6 +895,8 @@ async function upsertCandidateFromRepo(repo: GitHubRepo): Promise<'inserted' | '
     select: {
       id: true,
       status: true,
+      stars: true,
+      forks: true,
     },
   });
 
@@ -885,10 +928,27 @@ async function upsertCandidateFromRepo(repo: GitHubRepo): Promise<'inserted' | '
     updateData.publishedAt = now;
     updateData.failureReason = null;
   } else {
-    updateData.status = existing.status === 'failed' ? 'pending' : existing.status;
-    updateData.failureReason = existing.status === 'failed' ? null : undefined;
+    const reviveDecision = evaluateRejectedRevive({
+      previousStatus: existing.status,
+      previousStars: Number(existing.stars || 0),
+      previousForks: Number(existing.forks || 0),
+      nextStars: data.stars,
+      nextForks: data.forks,
+    });
+
+    if (existing.status === 'failed' || reviveDecision.revive) {
+      updateData.status = 'pending';
+      updateData.failureReason = null;
+      updateData.autoDecisionNote = reviveDecision.note || null;
+    } else {
+      updateData.status = existing.status;
+      updateData.failureReason = undefined;
+    }
+
     updateData.autoDecision = null;
-    updateData.autoDecisionNote = null;
+    if (!reviveDecision.revive) {
+      updateData.autoDecisionNote = null;
+    }
   }
 
   await prisma.ingestCandidate.update({
