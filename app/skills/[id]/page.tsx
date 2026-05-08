@@ -124,10 +124,41 @@ export default function SkillDetailPage() {
   const installCommand =
     (skill?.installCommand || '').trim() ||
     (sourceUrl ? buildInstallCommand(sourceUrl) : '');
-  const docBlocks = useMemo(
-    () => parseDocBlocks(skill?.description || ''),
-    [skill?.description]
-  );
+  const capabilityContent = useMemo(() => {
+    const summary = (skill?.summary || '').trim();
+    const parsedMeta = extractCapabilityMetadata(skill?.description || '');
+    const docBlocks = removeSummaryDuplicateBlocks(
+      parseDocBlocks(parsedMeta.cleanedDescription || ''),
+      summary
+    );
+    const fallbackDocBlocks =
+      docBlocks.length > 0 ? docBlocks : buildFallbackCapabilityBlocks(parsedMeta);
+    const paragraphCandidates = fallbackDocBlocks
+      .filter((block): block is Extract<DocBlock, { type: 'paragraph' }> => block.type === 'paragraph')
+      .map((block) => block.text);
+    const overviewText =
+      summary ||
+      paragraphCandidates[0] ||
+      parsedMeta.cleanedDescription.split('\n').find((line) => line.trim().length > 0) ||
+      '暂无功能概览';
+
+    const highlights = buildHighlights([summary, ...paragraphCandidates].join('\n'));
+
+    return {
+      overviewText,
+      highlights,
+      docBlocks: fallbackDocBlocks,
+      sourceUrl: parsedMeta.sourceUrl || sourceUrl || null,
+      stars: parsedMeta.stars,
+      forks: parsedMeta.forks,
+      language: parsedMeta.language,
+      license: parsedMeta.license,
+      isAutoIngested:
+        Boolean(parsedMeta.sourceUrl) ||
+        /自动收录/.test(skill?.summary || '') ||
+        /auto-ingest/.test((skill?.tags || []).join(' ')),
+    };
+  }, [skill, sourceUrl]);
   const canManageCurrentSkill = useMemo(() => {
     if (!skill) return false;
     return canManageSkill(session?.user?.email || null, session?.user?.id || null, skill.authorId);
@@ -399,15 +430,60 @@ export default function SkillDetailPage() {
           ) : null}
 
           <div className="skill-description-card">
-            <h3>✨ 功能简介</h3>
-            <p className="description-text">{skill.summary || '暂无功能简介'}</p>
+            <h3>✨ 功能概览</h3>
+            <p className="description-text">{capabilityContent.overviewText}</p>
+            {capabilityContent.highlights.length > 0 ? (
+              <ul className="overview-highlight-list">
+                {capabilityContent.highlights.map((item, index) => (
+                  <li key={`${item}-${index}`}>{item}</li>
+                ))}
+              </ul>
+            ) : null}
           </div>
 
           <div className="skill-description-card doc-surface">
             <div className="doc-surface-head">
-              <h3>skill能力</h3>
+              <h3>Skill 能力详解</h3>
+              {capabilityContent.isAutoIngested ? (
+                <span className="doc-origin-tag">自动收录</span>
+              ) : null}
             </div>
-            <DocRenderer blocks={docBlocks} />
+            <div className="capability-meta-grid">
+              <CapabilityMetaItem label="来源仓库">
+                {capabilityContent.sourceUrl ? (
+                  <a
+                    href={capabilityContent.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="meta-link"
+                  >
+                    {safeHost(capabilityContent.sourceUrl) || capabilityContent.sourceUrl}
+                  </a>
+                ) : (
+                  <span className="meta-muted">未提供</span>
+                )}
+              </CapabilityMetaItem>
+              <CapabilityMetaItem label="Stars">
+                {typeof capabilityContent.stars === 'number'
+                  ? formatNumber(capabilityContent.stars)
+                  : '—'}
+              </CapabilityMetaItem>
+              <CapabilityMetaItem label="Forks">
+                {typeof capabilityContent.forks === 'number'
+                  ? formatNumber(capabilityContent.forks)
+                  : '—'}
+              </CapabilityMetaItem>
+              <CapabilityMetaItem label="Language">
+                {capabilityContent.language || '未标注'}
+              </CapabilityMetaItem>
+              <CapabilityMetaItem label="License">
+                {capabilityContent.license || '未标注'}
+              </CapabilityMetaItem>
+              <CapabilityMetaItem label="分类">
+                {skill.category?.name || '未分类'}
+              </CapabilityMetaItem>
+            </div>
+            <DocRenderer blocks={capabilityContent.docBlocks} />
           </div>
 
         </div>
@@ -744,6 +820,19 @@ export default function SkillDetailPage() {
           word-break: break-word;
         }
 
+        .overview-highlight-list {
+          margin: 12px 0 0;
+          padding-left: 20px;
+          display: grid;
+          gap: 7px;
+          color: #234266;
+        }
+
+        .overview-highlight-list li {
+          font-size: 14px;
+          line-height: 1.7;
+        }
+
         .doc-surface {
           padding-top: 16px;
         }
@@ -751,7 +840,8 @@ export default function SkillDetailPage() {
         .doc-surface-head {
           display: flex;
           align-items: center;
-          justify-content: flex-start;
+          justify-content: space-between;
+          gap: 10px;
           border-bottom: 1px solid rgba(12, 30, 64, 0.1);
           padding-bottom: 10px;
           margin-bottom: 14px;
@@ -761,6 +851,65 @@ export default function SkillDetailPage() {
           font-size: 20px;
           font-weight: 800;
           margin: 0;
+        }
+
+        .doc-origin-tag {
+          border-radius: 999px;
+          padding: 5px 10px;
+          border: 1px solid rgba(13, 89, 180, 0.26);
+          background: rgba(8, 118, 255, 0.1);
+          color: #0f56af;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.2px;
+          flex-shrink: 0;
+        }
+
+        .capability-meta-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 10px;
+          margin-bottom: 14px;
+        }
+
+        .capability-meta-card {
+          border-radius: 12px;
+          border: 1px solid rgba(17, 73, 132, 0.12);
+          background: rgba(243, 248, 255, 0.84);
+          padding: 10px 12px;
+          min-height: 66px;
+          display: grid;
+          align-content: center;
+          gap: 4px;
+        }
+
+        .capability-meta-label {
+          font-size: 11px;
+          letter-spacing: 0.6px;
+          text-transform: uppercase;
+          color: #6282a7;
+          font-weight: 700;
+        }
+
+        .capability-meta-value {
+          font-size: 14px;
+          line-height: 1.45;
+          color: #163a64;
+          overflow-wrap: anywhere;
+        }
+
+        .meta-link {
+          color: #0f5fca;
+          text-decoration: none;
+          border-bottom: 1px dashed rgba(15, 95, 202, 0.35);
+        }
+
+        .meta-link:hover {
+          border-bottom-style: solid;
+        }
+
+        .meta-muted {
+          color: #6f87a3;
         }
 
         .action-card,
@@ -872,12 +1021,45 @@ export default function SkillDetailPage() {
             font-size: 14px;
           }
 
+          .overview-highlight-list li {
+            font-size: 13px;
+          }
+
+          .capability-meta-grid {
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+          }
+
+          .capability-meta-card {
+            min-height: 62px;
+            padding: 9px 10px;
+          }
+
+          .capability-meta-value {
+            font-size: 13px;
+          }
+
           .copy-btn,
           .copy-compact-btn {
             font-size: 11px;
           }
         }
       `}</style>
+    </div>
+  );
+}
+
+function CapabilityMetaItem({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="capability-meta-card">
+      <div className="capability-meta-label">{label}</div>
+      <div className="capability-meta-value">{children}</div>
     </div>
   );
 }
@@ -1066,6 +1248,170 @@ function DocRenderer({ blocks }: { blocks: DocBlock[] }) {
       `}</style>
     </div>
   );
+}
+
+function normalizeComparableText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[`*_#>\-\s。，、,.!?！？:：;；()（）{}"'“”‘’]/g, '')
+    .trim();
+}
+
+function removeSummaryDuplicateBlocks(blocks: DocBlock[], summary: string): DocBlock[] {
+  const normalizedSummary = normalizeComparableText(summary);
+  if (!normalizedSummary || normalizedSummary.length < 12) {
+    return blocks;
+  }
+
+  let removed = false;
+  return blocks.filter((block) => {
+    if (removed || block.type !== 'paragraph') {
+      return true;
+    }
+    const normalizedParagraph = normalizeComparableText(block.text);
+    if (!normalizedParagraph) {
+      return true;
+    }
+
+    const isSameMeaning =
+      normalizedParagraph === normalizedSummary ||
+      normalizedParagraph.includes(normalizedSummary) ||
+      normalizedSummary.includes(normalizedParagraph);
+
+    if (isSameMeaning) {
+      removed = true;
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function buildHighlights(content: string): string[] {
+  const candidates = content
+    .replace(/\r\n/g, '\n')
+    .split(/[\n。！？!?\r]/)
+    .flatMap((sentence) => sentence.split(/[，,、；;]/))
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 6 && item.length <= 64);
+
+  const deduped: string[] = [];
+  for (const item of candidates) {
+    const normalized = normalizeComparableText(item);
+    if (!normalized) continue;
+    if (deduped.some((existing) => normalizeComparableText(existing) === normalized)) {
+      continue;
+    }
+    deduped.push(item);
+    if (deduped.length >= 5) break;
+  }
+
+  return deduped;
+}
+
+function parseMetricNumber(value: string): number | null {
+  const numeric = Number(value.replace(/,/g, '').trim());
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function extractCapabilityMetadata(rawDescription: string): {
+  cleanedDescription: string;
+  sourceUrl: string | null;
+  stars: number | null;
+  forks: number | null;
+  language: string | null;
+  license: string | null;
+} {
+  const lines = rawDescription.replace(/\r\n/g, '\n').split('\n');
+  const retainedLines: string[] = [];
+  let sourceUrl: string | null = null;
+  let stars: number | null = null;
+  let forks: number | null = null;
+  let language: string | null = null;
+  let license: string | null = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      retainedLines.push('');
+      continue;
+    }
+
+    const sourceMatch = trimmed.match(/^自动收录来源[:：]\s*(https?:\/\/\S+)/i);
+    if (sourceMatch) {
+      sourceUrl = sourceMatch[1];
+      continue;
+    }
+
+    const starsMatch = trimmed.match(/^stars[:：]\s*([\d,]+)/i);
+    if (starsMatch) {
+      stars = parseMetricNumber(starsMatch[1]);
+      continue;
+    }
+
+    const forksMatch = trimmed.match(/^forks[:：]\s*([\d,]+)/i);
+    if (forksMatch) {
+      forks = parseMetricNumber(forksMatch[1]);
+      continue;
+    }
+
+    const languageMatch = trimmed.match(/^language[:：]\s*(.+)$/i);
+    if (languageMatch) {
+      language = languageMatch[1].trim();
+      continue;
+    }
+
+    const licenseMatch = trimmed.match(/^license[:：]\s*(.+)$/i);
+    if (licenseMatch) {
+      license = licenseMatch[1].trim();
+      continue;
+    }
+
+    retainedLines.push(line);
+  }
+
+  return {
+    cleanedDescription: retainedLines.join('\n').replace(/\n{3,}/g, '\n\n').trim(),
+    sourceUrl,
+    stars,
+    forks,
+    language,
+    license,
+  };
+}
+
+function buildFallbackCapabilityBlocks(
+  metadata: {
+    sourceUrl: string | null;
+    stars: number | null;
+    forks: number | null;
+    language: string | null;
+    license: string | null;
+  }
+): DocBlock[] {
+  const blocks: DocBlock[] = [];
+  const items: string[] = [];
+  if (metadata.sourceUrl) {
+    items.push(`来源仓库：${metadata.sourceUrl}`);
+  }
+  if (typeof metadata.stars === 'number') {
+    items.push(`GitHub Stars：${metadata.stars}`);
+  }
+  if (typeof metadata.forks === 'number') {
+    items.push(`GitHub Forks：${metadata.forks}`);
+  }
+  if (metadata.language) {
+    items.push(`开发语言：${metadata.language}`);
+  }
+  if (metadata.license) {
+    items.push(`开源协议：${metadata.license}`);
+  }
+
+  if (items.length > 0) {
+    blocks.push({ type: 'list', ordered: false, items });
+  }
+
+  return blocks;
 }
 
 function parseDocBlocks(raw: string): DocBlock[] {
