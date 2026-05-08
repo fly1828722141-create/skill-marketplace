@@ -1,7 +1,7 @@
 import prisma from '@/lib/prisma';
 import { recordEvent } from '@/lib/event-log';
 import { ensureDefaultCategories } from '@/lib/skill-categories';
-import { getSkillIngestConfig } from '@/lib/ingest-config';
+import { getSkillIngestConfig, type DiscoverSort } from '@/lib/ingest-config';
 import { parseSkillLinkInput } from '@/lib/skill-link-input';
 import { toPrismaTagsValue } from '@/lib/tags';
 
@@ -53,6 +53,8 @@ export interface DiscoveryResult {
   qualityFilteredCount: number;
   totalCandidates: number;
   exhausted: boolean;
+  queryHealth: DiscoveryQueryHealth[];
+  queryCoverage: DiscoveryQueryCoverage[];
 }
 
 export interface PublishOptions extends IngestRunContext {
@@ -82,6 +84,31 @@ interface CollectionDecision {
 interface RejectedReviveDecision {
   revive: boolean;
   note?: string;
+}
+
+export interface DiscoveryQueryHealth {
+  query: string;
+  sort: DiscoverSort;
+  requests: number;
+  fetched: number;
+  scanned: number;
+  inserted: number;
+  updated: number;
+  qualityFiltered: number;
+  duplicates: number;
+  invalid: number;
+}
+
+export interface DiscoveryQueryCoverage {
+  query: string;
+  requests: number;
+  fetched: number;
+  scanned: number;
+  inserted: number;
+  updated: number;
+  qualityFiltered: number;
+  duplicates: number;
+  invalid: number;
 }
 
 function uniqueStrings(items: Array<string | null | undefined>, max = 10): string[] {
@@ -734,12 +761,13 @@ function evaluateAutoDecision(candidate: {
 async function requestGitHubSearch(
   query: string,
   perPage: number,
-  page: number
+  page: number,
+  sort: DiscoverSort
 ): Promise<GitHubSearchResponse> {
   const config = getSkillIngestConfig();
   const params = new URLSearchParams({
     q: query,
-    sort: 'updated',
+    sort,
     order: 'desc',
     per_page: String(perPage),
     page: String(page),
@@ -803,6 +831,7 @@ async function finishIngestRun(
     failedCount?: number;
     heldCount?: number;
     message?: string;
+    querySnapshot?: string;
   }
 ) {
   await prisma.ingestRun.update({
@@ -818,6 +847,7 @@ async function finishIngestRun(
       failedCount: data.failedCount,
       heldCount: data.heldCount,
       message: data.message || null,
+      querySnapshot: data.querySnapshot || undefined,
       finishedAt: new Date(),
     },
   });
@@ -1220,9 +1250,13 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
       ? options.queries.map((item) => item.trim()).filter(Boolean)
       : config.githubQueries;
   const normalizedQueries = [...new Set(queries)];
+  const normalizedSorts = [...new Set(config.discoverSorts)].filter(Boolean);
   const perQuery = options.perQuery || config.discoverPerQuery;
   const maxPagesPerQuery = options.maxPagesPerQuery || config.discoverMaxPagesPerQuery;
   const maxCandidates = options.maxCandidates || config.discoverMaxCandidates;
+  const targets = normalizedQueries.flatMap((query) =>
+    normalizedSorts.map((sort) => ({ query, sort }))
+  );
 
   const run = await createIngestRun({
     runType: 'discover',
@@ -1230,10 +1264,11 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
     triggerLabel: options.triggerLabel,
     querySnapshot: JSON.stringify({
       queries: normalizedQueries,
+      sorts: normalizedSorts,
       perQuery,
       maxPagesPerQuery,
       maxCandidates,
-      schedule: 'round-robin',
+      schedule: 'round-robin-query-sort',
     }),
   });
 
@@ -1245,22 +1280,42 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
 
   try {
     const seen = new Set<string>();
-    const exhaustedQueryIndex = new Set<number>();
+    const exhaustedTargetIndex = new Set<number>();
+    const queryHealthMap = new Map<string, DiscoveryQueryHealth>();
 
     for (let page = 1; page <= maxPagesPerQuery; page += 1) {
       if (seen.size >= maxCandidates) break;
 
       let pageFetchedAny = false;
 
-      for (let queryIndex = 0; queryIndex < normalizedQueries.length; queryIndex += 1) {
+      for (let queryIndex = 0; queryIndex < targets.length; queryIndex += 1) {
         if (seen.size >= maxCandidates) break;
-        if (exhaustedQueryIndex.has(queryIndex)) continue;
+        if (exhaustedTargetIndex.has(queryIndex)) continue;
 
-        const query = normalizedQueries[queryIndex];
-        const response = await requestGitHubSearch(query, perQuery, page);
+        const { query, sort } = targets[queryIndex];
+        const healthKey = `${sort}::${query}`;
+        if (!queryHealthMap.has(healthKey)) {
+          queryHealthMap.set(healthKey, {
+            query,
+            sort,
+            requests: 0,
+            fetched: 0,
+            scanned: 0,
+            inserted: 0,
+            updated: 0,
+            qualityFiltered: 0,
+            duplicates: 0,
+            invalid: 0,
+          });
+        }
+        const health = queryHealthMap.get(healthKey)!;
+        health.requests += 1;
+
+        const response = await requestGitHubSearch(query, perQuery, page, sort);
         const items = Array.isArray(response.items) ? response.items : [];
+        health.fetched += items.length;
         if (items.length === 0) {
-          exhaustedQueryIndex.add(queryIndex);
+          exhaustedTargetIndex.add(queryIndex);
           continue;
         }
 
@@ -1272,30 +1327,40 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
           const key = String(repo.id);
           if (seen.has(key)) {
             skippedCount += 1;
+            health.duplicates += 1;
             continue;
           }
           seen.add(key);
 
           if (!repo.full_name || !repo.html_url) {
             skippedCount += 1;
+            health.invalid += 1;
             continue;
           }
 
           scannedCount += 1;
+          health.scanned += 1;
 
           const collectionDecision = evaluateCollectionDecision(repo);
           if (!collectionDecision.allow) {
             qualityFilteredCount += 1;
+            health.qualityFiltered += 1;
             continue;
           }
 
           const result = await upsertCandidateFromRepo(repo);
-          if (result === 'inserted') insertedCount += 1;
-          if (result === 'updated') updatedCount += 1;
+          if (result === 'inserted') {
+            insertedCount += 1;
+            health.inserted += 1;
+          }
+          if (result === 'updated') {
+            updatedCount += 1;
+            health.updated += 1;
+          }
         }
 
         if (items.length < perQuery) {
-          exhaustedQueryIndex.add(queryIndex);
+          exhaustedTargetIndex.add(queryIndex);
         }
       }
 
@@ -1303,10 +1368,51 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
         break;
       }
 
-      if (exhaustedQueryIndex.size >= normalizedQueries.length) {
+      if (exhaustedTargetIndex.size >= targets.length) {
         break;
       }
     }
+
+    const queryHealth = [...queryHealthMap.values()].sort((left, right) => {
+      const scoreLeft = left.inserted * 3 + left.updated;
+      const scoreRight = right.inserted * 3 + right.updated;
+      if (scoreRight !== scoreLeft) return scoreRight - scoreLeft;
+      if (right.scanned !== left.scanned) return right.scanned - left.scanned;
+      if (left.sort !== right.sort) return left.sort.localeCompare(right.sort);
+      return left.query.localeCompare(right.query);
+    });
+
+    const queryCoverageMap = new Map<string, DiscoveryQueryCoverage>();
+    for (const item of queryHealth) {
+      if (!queryCoverageMap.has(item.query)) {
+        queryCoverageMap.set(item.query, {
+          query: item.query,
+          requests: 0,
+          fetched: 0,
+          scanned: 0,
+          inserted: 0,
+          updated: 0,
+          qualityFiltered: 0,
+          duplicates: 0,
+          invalid: 0,
+        });
+      }
+      const aggregate = queryCoverageMap.get(item.query)!;
+      aggregate.requests += item.requests;
+      aggregate.fetched += item.fetched;
+      aggregate.scanned += item.scanned;
+      aggregate.inserted += item.inserted;
+      aggregate.updated += item.updated;
+      aggregate.qualityFiltered += item.qualityFiltered;
+      aggregate.duplicates += item.duplicates;
+      aggregate.invalid += item.invalid;
+    }
+    const queryCoverage = [...queryCoverageMap.values()].sort((left, right) => {
+      const scoreLeft = left.inserted * 3 + left.updated;
+      const scoreRight = right.inserted * 3 + right.updated;
+      if (scoreRight !== scoreLeft) return scoreRight - scoreLeft;
+      return right.scanned - left.scanned;
+    });
 
     await finishIngestRun(run.id, {
       status: 'success',
@@ -1315,6 +1421,16 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
       updatedCount,
       skippedCount,
       message: `扫描 ${scannedCount} 条，质量过滤 ${qualityFilteredCount}，新增 ${insertedCount}，更新 ${updatedCount}`,
+      querySnapshot: JSON.stringify({
+        queries: normalizedQueries,
+        sorts: normalizedSorts,
+        perQuery,
+        maxPagesPerQuery,
+        maxCandidates,
+        schedule: 'round-robin-query-sort',
+        queryHealth,
+        queryCoverage,
+      }),
     });
 
     return {
@@ -1326,6 +1442,8 @@ export async function runGitHubDiscovery(options: DiscoveryOptions): Promise<Dis
       qualityFilteredCount,
       totalCandidates: seen.size,
       exhausted: seen.size >= maxCandidates,
+      queryHealth,
+      queryCoverage,
     };
   } catch (error: any) {
     await finishIngestRun(run.id, {

@@ -56,6 +56,10 @@ const DEFAULT_LICENSE_ALLOWLIST = [
   'unlicense',
 ];
 
+const DEFAULT_DISCOVER_SORTS: DiscoverSort[] = ['updated', 'stars'];
+
+export type DiscoverSort = 'updated' | 'stars';
+
 export interface IngestQualityWeights {
   stars: number;
   forks: number;
@@ -67,6 +71,7 @@ export interface SkillIngestConfig {
   githubApiBase: string;
   githubToken: string;
   githubQueries: string[];
+  discoverSorts: DiscoverSort[];
   discoverPerQuery: number;
   discoverMaxPagesPerQuery: number;
   discoverMaxCandidates: number;
@@ -92,11 +97,29 @@ export interface SkillIngestConfig {
   hmacMaxSkewSeconds: number;
 }
 
+function readDiscoverSorts(name: string, fallback: DiscoverSort[]): DiscoverSort[] {
+  const raw = readCsv(name, fallback);
+  const result: DiscoverSort[] = [];
+  for (const item of raw) {
+    const normalized = item.trim().toLowerCase();
+    if (normalized !== 'updated' && normalized !== 'stars') {
+      continue;
+    }
+    if (result.includes(normalized)) {
+      continue;
+    }
+    result.push(normalized);
+  }
+
+  return result.length > 0 ? result : fallback;
+}
+
 export function getSkillIngestConfig(): SkillIngestConfig {
   return {
     githubApiBase: readEnv('GITHUB_API_BASE', 'https://api.github.com').replace(/\/+$/, ''),
     githubToken: readEnv('GITHUB_DISCOVERY_TOKEN') || readEnv('GITHUB_TOKEN'),
     githubQueries: readCsv('INGEST_GITHUB_QUERIES', DEFAULT_GITHUB_QUERIES),
+    discoverSorts: readDiscoverSorts('INGEST_DISCOVER_SORTS', DEFAULT_DISCOVER_SORTS),
     discoverPerQuery: readInt('INGEST_DISCOVER_PER_QUERY', 15, { min: 1, max: 100 }),
     discoverMaxPagesPerQuery: readInt('INGEST_DISCOVER_MAX_PAGES_PER_QUERY', 3, {
       min: 1,
