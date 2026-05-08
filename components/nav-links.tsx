@@ -36,7 +36,7 @@ export default function NavLinks() {
       </Link>
       {isDashboardOwner ? (
         <Link href="/dashboard" className={getNavClass(pathname, '/dashboard')}>
-          数据看板
+          管理中心
         </Link>
       ) : null}
     </nav>

@@ -21,6 +21,16 @@ function readInt(name: string, fallback: number, options?: { min?: number; max?:
   return value;
 }
 
+function readFloat(name: string, fallback: number, options?: { min?: number; max?: number }): number {
+  const raw = readEnv(name);
+  const parsed = Number.parseFloat(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  let value = parsed;
+  if (typeof options?.min === 'number') value = Math.max(options.min, value);
+  if (typeof options?.max === 'number') value = Math.min(options.max, value);
+  return value;
+}
+
 function readCsv(name: string, fallback: string[]): string[] {
   const raw = readEnv(name);
   const source = raw || fallback.join(',');
@@ -46,6 +56,13 @@ const DEFAULT_LICENSE_ALLOWLIST = [
   'unlicense',
 ];
 
+export interface IngestQualityWeights {
+  stars: number;
+  forks: number;
+  recentActivity: number;
+  issueHealth: number;
+}
+
 export interface SkillIngestConfig {
   githubApiBase: string;
   githubToken: string;
@@ -57,6 +74,10 @@ export interface SkillIngestConfig {
   publishBatchSize: number;
   minStars: number;
   minForks: number;
+  qualityWeightStars: number;
+  qualityWeightForks: number;
+  qualityWeightRecentActivity: number;
+  qualityWeightIssueHealth: number;
   maxInactivityDays: number;
   requireLicense: boolean;
   allowedLicenses: string[];
@@ -84,6 +105,16 @@ export function getSkillIngestConfig(): SkillIngestConfig {
     publishBatchSize: readInt('INGEST_PUBLISH_BATCH_SIZE', 20, { min: 1, max: 200 }),
     minStars: readInt('INGEST_MIN_STARS', 50, { min: 0, max: 200000 }),
     minForks: readInt('INGEST_MIN_FORKS', 5, { min: 0, max: 200000 }),
+    qualityWeightStars: readFloat('INGEST_SCORE_WEIGHT_STARS', 0.45, { min: 0, max: 1 }),
+    qualityWeightForks: readFloat('INGEST_SCORE_WEIGHT_FORKS', 0.25, { min: 0, max: 1 }),
+    qualityWeightRecentActivity: readFloat('INGEST_SCORE_WEIGHT_RECENT_ACTIVITY', 0.2, {
+      min: 0,
+      max: 1,
+    }),
+    qualityWeightIssueHealth: readFloat('INGEST_SCORE_WEIGHT_ISSUE_HEALTH', 0.1, {
+      min: 0,
+      max: 1,
+    }),
     maxInactivityDays: readInt('INGEST_MAX_INACTIVITY_DAYS', 240, { min: 1, max: 3650 }),
     requireLicense: readBool('INGEST_REQUIRE_LICENSE', true),
     allowedLicenses: readCsv('INGEST_ALLOWED_LICENSES', DEFAULT_LICENSE_ALLOWLIST).map((key) =>

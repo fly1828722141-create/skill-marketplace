@@ -1,15 +1,24 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { message } from 'antd';
+import ManagementCenterHeader from '@/components/management-center-header';
 import { isDashboardOwnerEmail } from '@/lib/dashboard-access';
 import { formatDateTime, formatNumber } from '@/lib/utils';
 
 type CandidateStatus = 'pending' | 'approved' | 'rejected' | 'published' | 'failed';
 type CandidateFilter = CandidateStatus | 'all';
+type CandidateSortBy = 'qualityScore' | 'discoveredAt' | 'updatedAt' | 'stars' | 'forks';
+type CandidateSortOrder = 'asc' | 'desc';
+
+interface IngestQualityWeights {
+  stars: number;
+  forks: number;
+  recentActivity: number;
+  issueHealth: number;
+}
 
 interface IngestCandidate {
   id: string;
@@ -35,6 +44,7 @@ interface IngestCandidate {
   forks: number;
   watchers: number;
   openIssues: number;
+  qualityScore?: number;
   archived: boolean;
   disabled: boolean;
   categoryId?: string | null;
@@ -53,6 +63,9 @@ interface CandidateListResult {
   pageSize: number;
   totalPages: number;
   statusSummary: Record<string, number>;
+  qualityWeights?: IngestQualityWeights;
+  sortBy?: CandidateSortBy;
+  sortOrder?: CandidateSortOrder;
 }
 
 const FILTERS: Array<{ key: CandidateFilter; label: string }> = [
@@ -64,12 +77,27 @@ const FILTERS: Array<{ key: CandidateFilter; label: string }> = [
   { key: 'rejected', label: '已拒绝' },
 ];
 
+const SORT_OPTIONS: Array<{ key: CandidateSortBy; label: string }> = [
+  { key: 'qualityScore', label: '质量分' },
+  { key: 'discoveredAt', label: '发现时间' },
+  { key: 'updatedAt', label: '更新时间' },
+  { key: 'stars', label: 'Star' },
+  { key: 'forks', label: 'Fork' },
+];
+
 const STATUS_LABELS: Record<CandidateStatus, string> = {
   pending: '待处理',
   approved: '已通过',
   rejected: '已拒绝',
   published: '已发布',
   failed: '失败',
+};
+
+const DEFAULT_WEIGHTS: IngestQualityWeights = {
+  stars: 0.45,
+  forks: 0.25,
+  recentActivity: 0.2,
+  issueHealth: 0.1,
 };
 
 function formatRelativeStatus(candidate: IngestCandidate): string {
@@ -85,12 +113,38 @@ function buildStatusClass(status: CandidateStatus): string {
   return `ingest-status-badge ingest-status-${status}`;
 }
 
+function normalizeWeights(weights: IngestQualityWeights): IngestQualityWeights {
+  const safe = {
+    stars: Math.max(0, Number(weights.stars || 0)),
+    forks: Math.max(0, Number(weights.forks || 0)),
+    recentActivity: Math.max(0, Number(weights.recentActivity || 0)),
+    issueHealth: Math.max(0, Number(weights.issueHealth || 0)),
+  };
+
+  const total = safe.stars + safe.forks + safe.recentActivity + safe.issueHealth;
+  if (total <= 0) return { ...DEFAULT_WEIGHTS };
+
+  return {
+    stars: Number((safe.stars / total).toFixed(4)),
+    forks: Number((safe.forks / total).toFixed(4)),
+    recentActivity: Number((safe.recentActivity / total).toFixed(4)),
+    issueHealth: Number((safe.issueHealth / total).toFixed(4)),
+  };
+}
+
+function formatScore(value?: number): string {
+  if (typeof value !== 'number' || Number.isNaN(value)) return '--';
+  return value.toFixed(2);
+}
+
 export default function IngestDashboardPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const isDashboardOwner = isDashboardOwnerEmail(session?.user?.email);
 
   const [filter, setFilter] = useState<CandidateFilter>('pending');
+  const [sortBy, setSortBy] = useState<CandidateSortBy>('qualityScore');
+  const [sortOrder, setSortOrder] = useState<CandidateSortOrder>('desc');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const [loading, setLoading] = useState(true);
@@ -101,6 +155,12 @@ export default function IngestDashboardPage() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [statusSummary, setStatusSummary] = useState<Record<string, number>>({});
+  const [draftWeights, setDraftWeights] = useState<IngestQualityWeights>({ ...DEFAULT_WEIGHTS });
+  const [appliedWeights, setAppliedWeights] = useState<IngestQualityWeights>({ ...DEFAULT_WEIGHTS });
+  const [serverDefaultWeights, setServerDefaultWeights] = useState<IngestQualityWeights>({
+    ...DEFAULT_WEIGHTS,
+  });
+  const [weightsHydrated, setWeightsHydrated] = useState(false);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -113,7 +173,18 @@ export default function IngestDashboardPage() {
     if (!isDashboardOwner) return;
     void loadCandidates();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDashboardOwner, filter, page, pageSize]);
+  }, [
+    isDashboardOwner,
+    filter,
+    sortBy,
+    sortOrder,
+    page,
+    pageSize,
+    appliedWeights.stars,
+    appliedWeights.forks,
+    appliedWeights.recentActivity,
+    appliedWeights.issueHealth,
+  ]);
 
   const summaryCards = useMemo(
     () => [
@@ -151,12 +222,48 @@ export default function IngestDashboardPage() {
     [statusSummary, total]
   );
 
+  const draftWeightSum = useMemo(
+    () => draftWeights.stars + draftWeights.forks + draftWeights.recentActivity + draftWeights.issueHealth,
+    [draftWeights]
+  );
+
+  function updateDraftWeight(key: keyof IngestQualityWeights, value: string) {
+    const parsed = Number.parseFloat(value);
+    setDraftWeights((prev) => ({
+      ...prev,
+      [key]: Number.isFinite(parsed) ? parsed : 0,
+    }));
+  }
+
+  function applyWeights() {
+    const normalized = normalizeWeights(draftWeights);
+    setDraftWeights(normalized);
+    setAppliedWeights(normalized);
+    setSortBy('qualityScore');
+    setSortOrder('desc');
+    setPage(1);
+  }
+
+  function resetWeightsToServerDefault() {
+    setDraftWeights({ ...serverDefaultWeights });
+    setAppliedWeights({ ...serverDefaultWeights });
+    setSortBy('qualityScore');
+    setSortOrder('desc');
+    setPage(1);
+  }
+
   async function loadCandidates() {
     try {
       setLoading(true);
       const query = new URLSearchParams({
         page: String(page),
         pageSize: String(pageSize),
+        sortBy,
+        sortOrder,
+        weightStars: String(appliedWeights.stars),
+        weightForks: String(appliedWeights.forks),
+        weightRecentActivity: String(appliedWeights.recentActivity),
+        weightIssueHealth: String(appliedWeights.issueHealth),
       });
       if (filter !== 'all') {
         query.set('status', filter);
@@ -176,6 +283,15 @@ export default function IngestDashboardPage() {
       setTotal(Number(data.total || 0));
       setTotalPages(Math.max(1, Number(data.totalPages || 1)));
       setStatusSummary(data.statusSummary || {});
+
+      if (data.qualityWeights) {
+        setServerDefaultWeights(data.qualityWeights);
+        if (!weightsHydrated) {
+          setDraftWeights(data.qualityWeights);
+          setAppliedWeights(data.qualityWeights);
+          setWeightsHydrated(true);
+        }
+      }
     } catch (error: any) {
       console.error('加载候选池失败:', error);
       message.error(error?.message || '加载候选池失败');
@@ -296,46 +412,41 @@ export default function IngestDashboardPage() {
   }
 
   return (
-    <div className="dashboard-page ingest-page">
-      <div className="dashboard-header ingest-header">
-        <div>
-          <h1>自动收录审核面板</h1>
-          <p className="dashboard-manage-tip">
-            管理开源 Skill 候选池，执行自动收录、审批发布与失败重试。
-          </p>
-        </div>
-        <div className="dashboard-manage-actions ingest-header-actions">
-          <Link href="/dashboard" className="btn btn-secondary">
-            返回看板
-          </Link>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => void loadCandidates()}
-            disabled={loading}
-          >
-            {loading ? '刷新中...' : '刷新候选池'}
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => void runPublishWorkerNow()}
-            disabled={runningPublish}
-          >
-            {runningPublish ? '发布中...' : '发布已审批'}
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => void runDiscoveryNow()}
-            disabled={runningDiscover}
-          >
-            {runningDiscover ? '收录中...' : '立即收录'}
-          </button>
-        </div>
-      </div>
+    <div className="dashboard-page ingest-page management-center-page">
+      <ManagementCenterHeader
+        sectionTitle="收录审核台"
+        sectionDescription="管理 GitHub 候选池，按质量分排序审批，通过后发布到线上。"
+        actions={
+          <div className="dashboard-inline-actions ingest-header-actions">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => void loadCandidates()}
+              disabled={loading}
+            >
+              {loading ? '刷新中...' : '刷新候选池'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => void runPublishWorkerNow()}
+              disabled={runningPublish}
+            >
+              {runningPublish ? '发布中...' : '发布已审批'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => void runDiscoveryNow()}
+              disabled={runningDiscover}
+            >
+              {runningDiscover ? '收录中...' : '立即收录'}
+            </button>
+          </div>
+        }
+      />
 
-      <section className="dashboard-card ingest-summary-grid">
+      <section className="dashboard-card ingest-summary-grid management-surface">
         {summaryCards.map((item) => (
           <div key={item.key} className="ingest-summary-item">
             <span>{item.title}</span>
@@ -344,7 +455,122 @@ export default function IngestDashboardPage() {
         ))}
       </section>
 
-      <section className="dashboard-card">
+      <section className="dashboard-card ingest-score-board management-surface">
+        <div className="ingest-score-board-header">
+          <div>
+            <h3>质量分权重与排序</h3>
+            <p>
+              质量分 = Star × {appliedWeights.stars.toFixed(2)} + Fork × {appliedWeights.forks.toFixed(2)} +
+              活跃度 × {appliedWeights.recentActivity.toFixed(2)} + Issue 健康度 ×{' '}
+              {appliedWeights.issueHealth.toFixed(2)}
+            </p>
+          </div>
+          <div className="dashboard-inline-actions">
+            <label htmlFor="sortBySelect">排序字段</label>
+            <select
+              id="sortBySelect"
+              className="input"
+              value={sortBy}
+              onChange={(e) => {
+                setSortBy(e.target.value as CandidateSortBy);
+                setPage(1);
+              }}
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'));
+                setPage(1);
+              }}
+            >
+              {sortOrder === 'desc' ? '降序' : '升序'}
+            </button>
+          </div>
+        </div>
+
+        <div className="ingest-weight-grid">
+          <label>
+            Star 权重
+            <input
+              type="number"
+              min={0}
+              max={1}
+              step={0.01}
+              className="input"
+              value={draftWeights.stars}
+              onChange={(e) => updateDraftWeight('stars', e.target.value)}
+            />
+          </label>
+          <label>
+            Fork 权重
+            <input
+              type="number"
+              min={0}
+              max={1}
+              step={0.01}
+              className="input"
+              value={draftWeights.forks}
+              onChange={(e) => updateDraftWeight('forks', e.target.value)}
+            />
+          </label>
+          <label>
+            活跃度权重
+            <input
+              type="number"
+              min={0}
+              max={1}
+              step={0.01}
+              className="input"
+              value={draftWeights.recentActivity}
+              onChange={(e) => updateDraftWeight('recentActivity', e.target.value)}
+            />
+          </label>
+          <label>
+            Issue 健康度权重
+            <input
+              type="number"
+              min={0}
+              max={1}
+              step={0.01}
+              className="input"
+              value={draftWeights.issueHealth}
+              onChange={(e) => updateDraftWeight('issueHealth', e.target.value)}
+            />
+          </label>
+        </div>
+
+        <div className="ingest-score-actions">
+          <span>当前权重和：{draftWeightSum.toFixed(2)}（应用时自动归一化）</span>
+          <div className="dashboard-inline-actions">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setDraftWeights(normalizeWeights(draftWeights))}
+            >
+              归一化草稿
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={resetWeightsToServerDefault}
+            >
+              恢复默认
+            </button>
+            <button type="button" className="btn btn-primary" onClick={applyWeights}>
+              应用并按质量分排序
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="dashboard-card management-surface">
         <div className="ingest-filter-tabs" role="tablist" aria-label="候选状态筛选">
           {FILTERS.map((item) => (
             <button
@@ -357,9 +583,7 @@ export default function IngestDashboardPage() {
               }}
             >
               {item.label}
-              <span>
-                {formatNumber(item.key === 'all' ? total : statusSummary[item.key] || 0)}
-              </span>
+              <span>{formatNumber(item.key === 'all' ? total : statusSummary[item.key] || 0)}</span>
             </button>
           ))}
         </div>
@@ -370,7 +594,7 @@ export default function IngestDashboardPage() {
           <div className="empty-state">当前筛选下暂无候选 Skill</div>
         ) : (
           <div className="table-wrap">
-            <table className="dashboard-table ingest-table">
+            <table className="dashboard-table ingest-table management-table">
               <thead>
                 <tr>
                   <th>Skill / 仓库</th>
@@ -400,13 +624,12 @@ export default function IngestDashboardPage() {
                           </a>
                           <span className={buildStatusClass(candidate.status)}>{statusText}</span>
                         </div>
-                        {candidate.summary ? (
-                          <p className="ingest-summary-text">{candidate.summary}</p>
-                        ) : null}
+                        {candidate.summary ? <p className="ingest-summary-text">{candidate.summary}</p> : null}
                         <div className="ingest-command">{candidate.installCommand}</div>
                       </td>
                       <td>
                         <div className="ingest-metrics">
+                          <span className="ingest-quality-pill">质量分 {formatScore(candidate.qualityScore)}</span>
                           <span>⭐ {formatNumber(candidate.stars || 0)}</span>
                           <span>Fork {formatNumber(candidate.forks || 0)}</span>
                           <span>Issue {formatNumber(candidate.openIssues || 0)}</span>
@@ -421,9 +644,7 @@ export default function IngestDashboardPage() {
                         <div className="ingest-time-cell">
                           <span>发现：{formatDateTime(candidate.discoveredAt)}</span>
                           <span>更新：{formatDateTime(candidate.updatedAt)}</span>
-                          {candidate.publishedAt ? (
-                            <span>发布：{formatDateTime(candidate.publishedAt)}</span>
-                          ) : null}
+                          {candidate.publishedAt ? <span>发布：{formatDateTime(candidate.publishedAt)}</span> : null}
                         </div>
                       </td>
                       <td>
@@ -432,11 +653,7 @@ export default function IngestDashboardPage() {
                             type="button"
                             className="btn btn-primary"
                             onClick={() => void reviewCandidate(candidate, 'approve', { publishNow: true })}
-                            disabled={
-                              isBusy ||
-                              candidate.status === 'published' ||
-                              candidate.status === 'rejected'
-                            }
+                            disabled={isBusy || candidate.status === 'published' || candidate.status === 'rejected'}
                           >
                             {isBusy ? '处理中...' : '通过并发布'}
                           </button>
@@ -444,11 +661,7 @@ export default function IngestDashboardPage() {
                             type="button"
                             className="btn btn-secondary"
                             onClick={() => void reviewCandidate(candidate, 'approve', { publishNow: false })}
-                            disabled={
-                              isBusy ||
-                              candidate.status === 'published' ||
-                              candidate.status === 'rejected'
-                            }
+                            disabled={isBusy || candidate.status === 'published' || candidate.status === 'rejected'}
                           >
                             仅通过
                           </button>
