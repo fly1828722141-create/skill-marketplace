@@ -126,14 +126,30 @@ export default function SkillDetailPage() {
     (sourceUrl ? buildInstallCommand(sourceUrl) : '');
   const capabilityContent = useMemo(() => {
     const summary = (skill?.summary || '').trim();
+    const categoryName = skill?.category?.name || '未分类';
     const parsedMeta = extractCapabilityMetadata(skill?.description || '');
     const docBlocks = removeSummaryDuplicateBlocks(
       parseDocBlocks(parsedMeta.cleanedDescription || ''),
       summary
     );
-    const fallbackDocBlocks =
-      docBlocks.length > 0 ? docBlocks : buildFallbackCapabilityBlocks(parsedMeta);
-    const paragraphCandidates = fallbackDocBlocks
+    const panels = buildCapabilityPanels({
+      categoryName,
+      language: parsedMeta.language,
+      tags: skill?.tags || [],
+      installCommand,
+      sourceUrl: parsedMeta.sourceUrl || sourceUrl || null,
+    });
+    const generatedDocBlocks = buildGeneratedCapabilityBlocks({
+      title: skill?.title || '',
+      summary,
+      sourceUrl: parsedMeta.sourceUrl || sourceUrl || null,
+      panels,
+    });
+    const mergedDocBlocks = shouldExpandCapabilityDoc(docBlocks)
+      ? mergeCapabilityDocBlocks(docBlocks, generatedDocBlocks)
+      : docBlocks;
+    const resolvedDocBlocks = mergedDocBlocks.length > 0 ? mergedDocBlocks : generatedDocBlocks;
+    const paragraphCandidates = resolvedDocBlocks
       .filter((block): block is Extract<DocBlock, { type: 'paragraph' }> => block.type === 'paragraph')
       .map((block) => block.text);
     const overviewText =
@@ -142,12 +158,15 @@ export default function SkillDetailPage() {
       parsedMeta.cleanedDescription.split('\n').find((line) => line.trim().length > 0) ||
       '暂无功能概览';
 
-    const highlights = buildHighlights([summary, ...paragraphCandidates].join('\n'));
+    const highlights = buildHighlights(
+      [summary, ...panels.useCases, ...panels.quickStart, ...paragraphCandidates].join('\n')
+    );
 
     return {
       overviewText,
       highlights,
-      docBlocks: fallbackDocBlocks,
+      docBlocks: resolvedDocBlocks,
+      panels,
       sourceUrl: parsedMeta.sourceUrl || sourceUrl || null,
       stars: parsedMeta.stars,
       forks: parsedMeta.forks,
@@ -482,6 +501,11 @@ export default function SkillDetailPage() {
               <CapabilityMetaItem label="分类">
                 {skill.category?.name || '未分类'}
               </CapabilityMetaItem>
+            </div>
+            <div className="capability-panel-grid">
+              <CapabilityPanel title="适用场景" items={capabilityContent.panels.useCases} />
+              <CapabilityPanel title="适用人群" items={capabilityContent.panels.audience} />
+              <CapabilityPanel title="快速上手建议" items={capabilityContent.panels.quickStart} />
             </div>
             <DocRenderer blocks={capabilityContent.docBlocks} />
           </div>
@@ -912,6 +936,48 @@ export default function SkillDetailPage() {
           color: #6f87a3;
         }
 
+        .capability-panel-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+          margin-bottom: 14px;
+        }
+
+        .capability-panel {
+          border-radius: 14px;
+          border: 1px solid rgba(17, 73, 132, 0.14);
+          background: linear-gradient(
+            165deg,
+            rgba(255, 255, 255, 0.95) 0%,
+            rgba(241, 248, 255, 0.9) 100%
+          );
+          padding: 12px 14px;
+          min-height: 128px;
+          display: grid;
+          align-content: start;
+          gap: 8px;
+        }
+
+        .capability-panel h4 {
+          margin: 0;
+          font-size: 14px;
+          color: #123c68;
+          letter-spacing: 0.2px;
+        }
+
+        .capability-panel ul {
+          margin: 0;
+          padding-left: 18px;
+          display: grid;
+          gap: 5px;
+        }
+
+        .capability-panel li {
+          color: #27476c;
+          font-size: 13px;
+          line-height: 1.55;
+        }
+
         .action-card,
         .author-card {
           background: rgba(255, 255, 255, 0.9);
@@ -1030,6 +1096,20 @@ export default function SkillDetailPage() {
             gap: 8px;
           }
 
+          .capability-panel-grid {
+            grid-template-columns: 1fr;
+            gap: 8px;
+          }
+
+          .capability-panel {
+            min-height: 0;
+            padding: 11px 12px;
+          }
+
+          .capability-panel li {
+            font-size: 12px;
+          }
+
           .capability-meta-card {
             min-height: 62px;
             padding: 9px 10px;
@@ -1061,6 +1141,21 @@ function CapabilityMetaItem({
       <div className="capability-meta-label">{label}</div>
       <div className="capability-meta-value">{children}</div>
     </div>
+  );
+}
+
+function CapabilityPanel({ title, items }: { title: string; items: string[] }) {
+  if (!items.length) return null;
+
+  return (
+    <section className="capability-panel">
+      <h4>{title}</h4>
+      <ul>
+        {items.map((item, index) => (
+          <li key={`${title}-${index}`}>{item}</li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -1314,6 +1409,184 @@ function parseMetricNumber(value: string): number | null {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function uniqueByNormalized(items: string[], max = 4): string[] {
+  const result: string[] = [];
+  for (const item of items) {
+    const text = item.trim();
+    if (!text) continue;
+    const normalized = normalizeComparableText(text);
+    if (!normalized) continue;
+    if (result.some((existing) => normalizeComparableText(existing) === normalized)) {
+      continue;
+    }
+    result.push(text);
+    if (result.length >= max) break;
+  }
+  return result;
+}
+
+function buildCapabilityPanels(options: {
+  categoryName: string;
+  language: string | null;
+  tags: string[];
+  installCommand: string;
+  sourceUrl: string | null;
+}): {
+  useCases: string[];
+  audience: string[];
+  quickStart: string[];
+} {
+  const { categoryName, language, tags, installCommand, sourceUrl } = options;
+  const searchable = `${categoryName} ${(tags || []).join(' ')}`.toLowerCase();
+
+  const docUseCases = [
+    '建立团队可复用的 Skill 清单和工作流模板。',
+    '在 Codex CLI / API 场景中快速找到可执行能力。',
+    '把常见操作标准化，减少重复沟通与手工步骤。',
+  ];
+  const devUseCases = [
+    '为研发任务提供可复用的自动化能力入口。',
+    '将项目中的常见操作沉淀为标准 Skill 流程。',
+    '降低新成员上手成本，统一执行方式。',
+  ];
+  const dataUseCases = [
+    '支持数据处理、分析与脚本自动化的协作场景。',
+    '将高频数据任务沉淀为可复用技能模块。',
+    '帮助团队快速复用成熟的数据实践。',
+  ];
+  const genericUseCases = [
+    '复用社区开源能力，减少从零搭建成本。',
+    '把高频任务沉淀为标准化执行步骤。',
+    '提升团队在真实业务中的交付效率。',
+  ];
+
+  const useCases = uniqueByNormalized(
+    searchable.includes('文档') ||
+      searchable.includes('办公') ||
+      searchable.includes('知识') ||
+      searchable.includes('内容')
+      ? docUseCases
+      : searchable.includes('开发') ||
+          searchable.includes('工程') ||
+          searchable.includes('code') ||
+          searchable.includes('dev')
+        ? devUseCases
+        : searchable.includes('数据') || searchable.includes('analytics') || searchable.includes('analysis')
+          ? dataUseCases
+          : genericUseCases
+  );
+
+  const audience = uniqueByNormalized(
+    [
+      language ? `${language} 技术栈相关开发者。` : '',
+      `${categoryName} 场景的一线使用者与平台维护者。`,
+      '希望快速接入并验证开源 Skill 的团队管理员。',
+      '需要把 AI 能力纳入日常工作流的业务同学。',
+    ].filter(Boolean)
+  );
+
+  const shortCommand =
+    installCommand.length > 84 ? `${installCommand.slice(0, 84)}...` : installCommand;
+  const quickStart = uniqueByNormalized(
+    [
+      shortCommand ? `复制并执行安装命令：\`${shortCommand}\`` : '',
+      sourceUrl ? '先阅读源仓库 README，确认输入输出与依赖条件。' : '',
+      '在测试环境先验证效果，再推广到团队默认流程。',
+      '上线前确认许可证和安全边界是否符合组织规范。',
+    ].filter(Boolean),
+    5
+  );
+
+  return {
+    useCases,
+    audience,
+    quickStart,
+  };
+}
+
+function blockTextLength(block: DocBlock): number {
+  if (block.type === 'paragraph' || block.type === 'quote' || block.type === 'heading') {
+    return block.text.length;
+  }
+  if (block.type === 'list') {
+    return block.items.join('').length;
+  }
+  if (block.type === 'code') {
+    return block.code.length;
+  }
+  return 0;
+}
+
+function shouldExpandCapabilityDoc(blocks: DocBlock[]): boolean {
+  if (blocks.length === 0) return true;
+  const meaningfulCount = blocks.filter((block) => block.type !== 'divider').length;
+  const totalTextLength = blocks.reduce((sum, block) => sum + blockTextLength(block), 0);
+  return meaningfulCount < 4 || totalTextLength < 320;
+}
+
+function mergeCapabilityDocBlocks(primary: DocBlock[], generated: DocBlock[]): DocBlock[] {
+  if (!primary.length) return generated;
+  if (!generated.length) return primary;
+
+  const merged = [...primary];
+  const last = merged[merged.length - 1];
+  if (!last || last.type !== 'divider') {
+    merged.push({ type: 'divider' });
+  }
+  merged.push(...generated);
+  return merged;
+}
+
+function buildGeneratedCapabilityBlocks(options: {
+  title: string;
+  summary: string;
+  sourceUrl: string | null;
+  panels: {
+    useCases: string[];
+    audience: string[];
+    quickStart: string[];
+  };
+}): DocBlock[] {
+  const { title, summary, sourceUrl, panels } = options;
+  const blocks: DocBlock[] = [];
+
+  blocks.push({
+    type: 'heading',
+    level: 2,
+    text: '能力说明',
+  });
+  blocks.push({
+    type: 'paragraph',
+    text:
+      summary ||
+      `${title || '该 Skill'} 当前公开信息较少，以下为基于收录信息生成的能力导览，可先用于快速判断是否适配你的场景。`,
+  });
+
+  if (panels.useCases.length) {
+    blocks.push({ type: 'heading', level: 2, text: '适用场景' });
+    blocks.push({ type: 'list', ordered: false, items: panels.useCases });
+  }
+
+  if (panels.audience.length) {
+    blocks.push({ type: 'heading', level: 2, text: '适用人群' });
+    blocks.push({ type: 'list', ordered: false, items: panels.audience });
+  }
+
+  if (panels.quickStart.length) {
+    blocks.push({ type: 'heading', level: 2, text: '快速上手建议' });
+    blocks.push({ type: 'list', ordered: true, items: panels.quickStart });
+  }
+
+  if (sourceUrl) {
+    blocks.push({
+      type: 'quote',
+      text: `详细能力边界和示例请以源仓库文档为准：${sourceUrl}`,
+    });
+  }
+
+  return blocks;
+}
+
 function extractCapabilityMetadata(rawDescription: string): {
   cleanedDescription: string;
   sourceUrl: string | null;
@@ -1337,33 +1610,37 @@ function extractCapabilityMetadata(rawDescription: string): {
       continue;
     }
 
-    const sourceMatch = trimmed.match(/^自动收录来源[:：]\s*(https?:\/\/\S+)/i);
+    const content = trimmed.replace(/^[-*•]\s*/, '').trim();
+
+    const sourceMatch = content.match(
+      /^(自动收录来源|来源仓库|source(?:\s+repo)?|repository)[:：]\s*(https?:\/\/\S+)/i
+    );
     if (sourceMatch) {
-      sourceUrl = sourceMatch[1];
+      sourceUrl = sourceMatch[2];
       continue;
     }
 
-    const starsMatch = trimmed.match(/^stars[:：]\s*([\d,]+)/i);
+    const starsMatch = content.match(/^(github\s*)?stars?[:：]\s*([\d,]+)/i);
     if (starsMatch) {
-      stars = parseMetricNumber(starsMatch[1]);
+      stars = parseMetricNumber(starsMatch[2]);
       continue;
     }
 
-    const forksMatch = trimmed.match(/^forks[:：]\s*([\d,]+)/i);
+    const forksMatch = content.match(/^(github\s*)?forks?[:：]\s*([\d,]+)/i);
     if (forksMatch) {
-      forks = parseMetricNumber(forksMatch[1]);
+      forks = parseMetricNumber(forksMatch[2]);
       continue;
     }
 
-    const languageMatch = trimmed.match(/^language[:：]\s*(.+)$/i);
+    const languageMatch = content.match(/^(language|开发语言)[:：]\s*(.+)$/i);
     if (languageMatch) {
-      language = languageMatch[1].trim();
+      language = languageMatch[2].trim();
       continue;
     }
 
-    const licenseMatch = trimmed.match(/^license[:：]\s*(.+)$/i);
+    const licenseMatch = content.match(/^(license|开源协议)[:：]\s*(.+)$/i);
     if (licenseMatch) {
-      license = licenseMatch[1].trim();
+      license = licenseMatch[2].trim();
       continue;
     }
 
@@ -1378,40 +1655,6 @@ function extractCapabilityMetadata(rawDescription: string): {
     language,
     license,
   };
-}
-
-function buildFallbackCapabilityBlocks(
-  metadata: {
-    sourceUrl: string | null;
-    stars: number | null;
-    forks: number | null;
-    language: string | null;
-    license: string | null;
-  }
-): DocBlock[] {
-  const blocks: DocBlock[] = [];
-  const items: string[] = [];
-  if (metadata.sourceUrl) {
-    items.push(`来源仓库：${metadata.sourceUrl}`);
-  }
-  if (typeof metadata.stars === 'number') {
-    items.push(`GitHub Stars：${metadata.stars}`);
-  }
-  if (typeof metadata.forks === 'number') {
-    items.push(`GitHub Forks：${metadata.forks}`);
-  }
-  if (metadata.language) {
-    items.push(`开发语言：${metadata.language}`);
-  }
-  if (metadata.license) {
-    items.push(`开源协议：${metadata.license}`);
-  }
-
-  if (items.length > 0) {
-    blocks.push({ type: 'list', ordered: false, items });
-  }
-
-  return blocks;
 }
 
 function parseDocBlocks(raw: string): DocBlock[] {
