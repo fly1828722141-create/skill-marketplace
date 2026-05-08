@@ -2534,6 +2534,34 @@ button {
   background: rgba(255, 255, 255, 0.75);
 }
 
+.management-notice {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+}
+
+.management-notice strong {
+  font-size: 14px;
+}
+
+.management-notice p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.management-notice-warning {
+  border-color: rgba(180, 105, 0, 0.24);
+  background: linear-gradient(145deg, rgba(255, 248, 232, 0.95) 0%, rgba(255, 243, 217, 0.9) 100%);
+  color: #845200;
+}
+
+.management-notice-danger {
+  border-color: rgba(176, 33, 52, 0.22);
+  background: linear-gradient(145deg, rgba(255, 243, 245, 0.95) 0%, rgba(255, 237, 240, 0.9) 100%);
+  color: #8e1d2e;
+}
+
 .table-wrap {
   overflow-x: auto;
 }

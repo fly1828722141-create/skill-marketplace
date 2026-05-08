@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { message } from 'antd';
 import ManagementCenterHeader from '@/components/management-center-header';
 import { isDashboardOwnerEmail } from '@/lib/dashboard-access';
 import { formatNumber } from '@/lib/utils';
@@ -67,6 +66,8 @@ interface DashboardData {
       name: string;
     } | null;
   }>;
+  degraded?: boolean;
+  degradedReasons?: string[];
 }
 
 const EVENT_NAME_LABELS: Record<string, string> = {
@@ -109,6 +110,8 @@ export default function DashboardPage() {
   const [days, setDays] = useState(7);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -128,9 +131,11 @@ export default function DashboardPage() {
         }
 
         setData(result.data);
+        setFetchError(null);
       } catch (error: any) {
         console.error('加载数据中心失败:', error);
-        message.error(error.message || '加载数据中心失败');
+        if (!mounted) return;
+        setFetchError(error?.message || '加载数据中心失败');
       } finally {
         if (mounted) {
           setLoading(false);
@@ -152,7 +157,7 @@ export default function DashboardPage() {
       mounted = false;
       clearInterval(timer);
     };
-  }, [days, isDashboardOwner]);
+  }, [days, isDashboardOwner, reloadNonce]);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -189,12 +194,44 @@ export default function DashboardPage() {
               <option value={30}>最近 30 天</option>
               <option value={90}>最近 90 天</option>
             </select>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={loading}
+              onClick={() => setReloadNonce((value) => value + 1)}
+            >
+              {loading ? '刷新中...' : '立即刷新'}
+            </button>
           </div>
         }
       />
 
-      {loading || !data ? (
+      {fetchError ? (
+        <section className="dashboard-card management-notice management-notice-danger">
+          <strong>数据中心刷新失败</strong>
+          <p>
+            {fetchError}
+            {data ? '，当前展示的是最近一次成功加载的数据。' : '，请稍后点击刷新重试。'}
+          </p>
+        </section>
+      ) : null}
+
+      {data?.degraded ? (
+        <section className="dashboard-card management-notice management-notice-warning">
+          <strong>数据中心已降级展示</strong>
+          <p>当前存在数据库波动，部分统计暂时为默认值，系统会自动重试恢复。</p>
+        </section>
+      ) : null}
+
+      {loading && !data ? (
         <div className="loading-page">数据中心加载中...</div>
+      ) : !data ? (
+        <section className="dashboard-card management-surface">
+          <h3>暂无可用数据</h3>
+          <p className="dashboard-manage-tip">
+            当前未拉取到看板数据，请点击上方“立即刷新”重试。
+          </p>
+        </section>
       ) : (
         <>
           <div className="dashboard-grid management-kpi-grid">
