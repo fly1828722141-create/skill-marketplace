@@ -9,6 +9,7 @@ export const revalidate = 0;
 interface RefreshPublishedBody {
   batchSize?: number;
   candidateIds?: string[];
+  fullRefresh?: boolean;
 }
 
 function parseNumber(input: unknown): number | undefined {
@@ -38,12 +39,14 @@ export async function POST(request: NextRequest) {
     const candidateIds = Array.isArray(body.candidateIds)
       ? body.candidateIds.map((item) => String(item || '').trim()).filter(Boolean)
       : undefined;
+    const fullRefresh = body.fullRefresh === true;
 
     const result = await runRefreshPublishedSkills({
       triggerType: actor.triggerType,
       triggerLabel: actor.triggerLabel,
       batchSize,
       candidateIds,
+      fullRefresh,
     });
 
     return NextResponse.json(successResponse(result));

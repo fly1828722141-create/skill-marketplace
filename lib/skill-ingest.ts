@@ -76,6 +76,7 @@ export interface PublishResult {
 export interface RefreshPublishedSkillsOptions extends IngestRunContext {
   batchSize?: number;
   candidateIds?: string[];
+  fullRefresh?: boolean;
 }
 
 export interface RefreshPublishedSkillsResult {
@@ -1658,11 +1659,49 @@ function normalizeTagSetForCompare(tags: string[]): string {
   return uniqueStrings(tags || [], 128).sort().join('|');
 }
 
+function extractSourceUrlFromDescription(description: string | null | undefined): string | null {
+  const raw = String(description || '');
+  const match = raw.match(
+    /(?:自动收录来源|来源仓库|source(?:\s+repo)?|repository)[:：]\s*(https?:\/\/\S+)/i
+  );
+  return match?.[1]?.trim() || null;
+}
+
+function extractRepoFullNameFromUrl(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (!/github\.com$/i.test(parsed.hostname)) {
+      return null;
+    }
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    if (segments.length < 2) return null;
+    return `${segments[0]}/${segments[1].replace(/\.git$/i, '')}`;
+  } catch {
+    return null;
+  }
+}
+
+function uniqueRefreshKeys(items: Array<string | null | undefined>, max = 6000): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of items) {
+    const value = String(raw || '').trim();
+    if (!value) continue;
+    if (seen.has(value)) continue;
+    seen.add(value);
+    result.push(value);
+    if (result.length >= max) break;
+  }
+  return result;
+}
+
 export async function runRefreshPublishedSkills(
   options: RefreshPublishedSkillsOptions
 ): Promise<RefreshPublishedSkillsResult> {
   const config = getSkillIngestConfig();
   const batchSize = options.batchSize || Math.max(config.publishBatchSize, 100);
+  const fullRefresh = options.fullRefresh === true;
 
   const run = await createIngestRun({
     runType: 'refresh',
@@ -1671,151 +1710,391 @@ export async function runRefreshPublishedSkills(
     querySnapshot: JSON.stringify({
       batchSize,
       candidateIds: options.candidateIds || [],
+      fullRefresh,
     }),
   });
 
   try {
-    const where: any = options.candidateIds?.length
-      ? {
-          id: {
-            in: options.candidateIds,
-          },
-        }
-      : {
-          status: 'published',
-          publishedSkillId: {
-            not: null,
-          },
-        };
-
-    const candidates = await prisma.ingestCandidate.findMany({
-      where,
-      orderBy: [{ updatedAt: 'desc' }, { discoveredAt: 'desc' }],
-      take: batchSize,
-      select: {
-        id: true,
-        status: true,
-        publishedSkillId: true,
-        publishedAt: true,
-        failureReason: true,
-        repoFullName: true,
-        repoUrl: true,
-        sourceUrl: true,
-        installCommand: true,
-        summary: true,
-        description: true,
-        tags: true,
-        stars: true,
-        licenseKey: true,
-        categoryId: true,
-      },
-    });
-
-    const selectedCount = candidates.length;
+    let selectedCount = 0;
     let refreshedCount = 0;
     let skippedCount = 0;
     let failedCount = 0;
 
-    for (const candidate of candidates) {
-      try {
-        const parsed = parseSkillLinkInput(
-          candidate.installCommand || candidate.sourceUrl || candidate.repoUrl
-        );
-        const skillOrConditions: Array<Record<string, string>> = [];
-        if (candidate.publishedSkillId) {
-          skillOrConditions.push({ id: candidate.publishedSkillId });
-        }
-        if (parsed?.storageValue) {
-          skillOrConditions.push({ fileName: parsed.storageValue });
-        }
-        if (candidate.sourceUrl) {
-          skillOrConditions.push({ fileName: candidate.sourceUrl });
-        }
-
-        if (!skillOrConditions.length) {
-          skippedCount += 1;
-          continue;
-        }
-
-        const skill = await prisma.skill.findFirst({
-          where: {
-            OR: skillOrConditions,
-            status: {
-              in: ['active', 'archived'],
-            },
+    if (fullRefresh) {
+      const skills = await prisma.skill.findMany({
+        where: {
+          status: {
+            in: ['active', 'archived'],
           },
-          select: {
-            id: true,
-            summary: true,
-            description: true,
-            tags: true,
-            categoryId: true,
+          OR: [
+            {
+              tags: {
+                has: 'auto-ingest',
+              },
+            },
+            {
+              summary: {
+                contains: '自动收录',
+              },
+            },
+            {
+              description: {
+                contains: '自动收录来源',
+              },
+            },
+          ],
+        },
+        orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+        take: batchSize,
+        select: {
+          id: true,
+          title: true,
+          fileName: true,
+          summary: true,
+          description: true,
+          tags: true,
+          categoryId: true,
+        },
+      });
+
+      selectedCount = skills.length;
+      const skillIds = skills.map((item) => item.id);
+      const fileNames = uniqueRefreshKeys(skills.map((item) => item.fileName), batchSize * 3);
+      const sourceUrls = uniqueRefreshKeys(
+        skills.map((item) => {
+          const parsed = parseSkillLinkInput(item.fileName || '');
+          return (
+            extractSourceUrlFromDescription(item.description) ||
+            parsed?.sourceUrl ||
+            (String(item.fileName || '').startsWith('http') ? item.fileName : '')
+          );
+        }),
+        batchSize * 3
+      );
+
+      const candidateOrConditions: any[] = [];
+      if (skillIds.length > 0) {
+        candidateOrConditions.push({
+          publishedSkillId: {
+            in: skillIds,
           },
         });
+      }
+      if (fileNames.length > 0) {
+        candidateOrConditions.push({
+          installCommand: {
+            in: fileNames,
+          },
+        });
+        candidateOrConditions.push({
+          sourceUrl: {
+            in: fileNames,
+          },
+        });
+        candidateOrConditions.push({
+          repoUrl: {
+            in: fileNames,
+          },
+        });
+      }
+      if (sourceUrls.length > 0) {
+        candidateOrConditions.push({
+          sourceUrl: {
+            in: sourceUrls,
+          },
+        });
+        candidateOrConditions.push({
+          repoUrl: {
+            in: sourceUrls,
+          },
+        });
+      }
 
-        if (!skill) {
-          skippedCount += 1;
-          continue;
+      const candidates =
+        candidateOrConditions.length > 0
+          ? await prisma.ingestCandidate.findMany({
+              where: {
+                OR: candidateOrConditions,
+              },
+              orderBy: [{ updatedAt: 'desc' }, { lastSeenAt: 'desc' }, { discoveredAt: 'desc' }],
+              select: {
+                id: true,
+                status: true,
+                publishedSkillId: true,
+                publishedAt: true,
+                failureReason: true,
+                repoFullName: true,
+                repoUrl: true,
+                sourceUrl: true,
+                installCommand: true,
+                summary: true,
+                description: true,
+                tags: true,
+                stars: true,
+                licenseKey: true,
+                categoryId: true,
+              },
+            })
+          : [];
+
+      const candidateBySkillId = new Map<string, (typeof candidates)[number]>();
+      const candidateBySourceUrl = new Map<string, (typeof candidates)[number]>();
+      const candidateByInstall = new Map<string, (typeof candidates)[number]>();
+      for (const candidate of candidates) {
+        if (candidate.publishedSkillId && !candidateBySkillId.has(candidate.publishedSkillId)) {
+          candidateBySkillId.set(candidate.publishedSkillId, candidate);
         }
+        const sourceKeys = [candidate.sourceUrl, candidate.repoUrl];
+        for (const key of sourceKeys) {
+          const normalized = String(key || '').trim();
+          if (!normalized) continue;
+          if (!candidateBySourceUrl.has(normalized)) {
+            candidateBySourceUrl.set(normalized, candidate);
+          }
+        }
+        const installKey = String(candidate.installCommand || '').trim();
+        if (installKey && !candidateByInstall.has(installKey)) {
+          candidateByInstall.set(installKey, candidate);
+        }
+      }
 
-        const nextSummary = normalizeSummary(candidate.summary || '', `自动收录自 ${candidate.repoFullName}`);
-        const nextDescription = (
-          candidate.description || buildCandidateDescriptionFallback(candidate)
-        ).slice(0, 4000);
-        const nextTags = uniqueStrings([...(candidate.tags || []), 'auto-ingest'], 24);
-        const nextCategoryId = candidate.categoryId || skill.categoryId || null;
-        const tagsChanged =
-          normalizeTagSetForCompare(skill.tags || []) !== normalizeTagSetForCompare(nextTags);
-        const shouldUpdateCategory = nextCategoryId !== skill.categoryId;
+      for (const skill of skills) {
+        try {
+          const parsed = parseSkillLinkInput(skill.fileName || '');
+          const sourceFromDescription = extractSourceUrlFromDescription(skill.description);
+          const sourceUrl =
+            sourceFromDescription ||
+            parsed?.sourceUrl ||
+            (String(skill.fileName || '').startsWith('http') ? String(skill.fileName) : null);
+          const installKey = String(parsed?.storageValue || skill.fileName || '').trim();
 
-        const needsRefresh =
-          (skill.summary || '') !== nextSummary ||
-          (skill.description || '') !== nextDescription ||
-          tagsChanged ||
-          shouldUpdateCategory;
+          const candidate =
+            candidateBySkillId.get(skill.id) ||
+            (sourceUrl ? candidateBySourceUrl.get(sourceUrl) : undefined) ||
+            (installKey ? candidateByInstall.get(installKey) : undefined) ||
+            (skill.fileName ? candidateBySourceUrl.get(skill.fileName) : undefined);
 
-        if (!needsRefresh) {
-          skippedCount += 1;
-        } else {
-          await prisma.skill.update({
-            where: {
-              id: skill.id,
+          const repoFullName =
+            candidate?.repoFullName ||
+            extractRepoFullNameFromUrl(candidate?.repoUrl || candidate?.sourceUrl || sourceUrl) ||
+            skill.title ||
+            'auto-ingest-skill';
+          const fallbackRepoUrl =
+            candidate?.repoUrl || candidate?.sourceUrl || sourceUrl || String(skill.fileName || '');
+          const nextSummary = normalizeSummary(
+            candidate?.summary || skill.summary || '',
+            `自动收录自 ${repoFullName}`
+          );
+          const nextDescription = (
+            candidate?.description ||
+            skill.description ||
+            buildCandidateDescriptionFallback({
+              repoUrl: fallbackRepoUrl || 'https://github.com',
+              summary: candidate?.summary || skill.summary || null,
+              stars: Number(candidate?.stars || 0),
+              licenseKey: candidate?.licenseKey || null,
+            })
+          ).slice(0, 4000);
+          const nextTags = uniqueStrings([...(candidate?.tags || skill.tags || []), 'auto-ingest'], 24);
+          const nextCategoryId = candidate?.categoryId || skill.categoryId || null;
+          const tagsChanged =
+            normalizeTagSetForCompare(skill.tags || []) !== normalizeTagSetForCompare(nextTags);
+          const shouldUpdateCategory = nextCategoryId !== skill.categoryId;
+
+          const needsRefresh =
+            (skill.summary || '') !== nextSummary ||
+            (skill.description || '') !== nextDescription ||
+            tagsChanged ||
+            shouldUpdateCategory;
+
+          if (!needsRefresh) {
+            skippedCount += 1;
+          } else {
+            await prisma.skill.update({
+              where: {
+                id: skill.id,
+              },
+              data: {
+                summary: nextSummary,
+                description: nextDescription,
+                tags: toPrismaTagsValue(nextTags, prisma) as any,
+                categoryId: nextCategoryId,
+              },
+            });
+            refreshedCount += 1;
+          }
+
+          if (candidate) {
+            const candidatePatch: {
+              publishedSkillId?: string;
+              publishedAt?: Date;
+              failureReason?: string | null;
+            } = {};
+            if (!candidate.publishedSkillId || candidate.publishedSkillId !== skill.id) {
+              candidatePatch.publishedSkillId = skill.id;
+            }
+            if (!candidate.publishedAt) {
+              candidatePatch.publishedAt = new Date();
+            }
+            if (candidate.failureReason) {
+              candidatePatch.failureReason = null;
+            }
+            if (Object.keys(candidatePatch).length > 0) {
+              await prisma.ingestCandidate.update({
+                where: {
+                  id: candidate.id,
+                },
+                data: candidatePatch,
+              });
+            }
+          }
+        } catch {
+          failedCount += 1;
+        }
+      }
+    } else {
+      const where: any = options.candidateIds?.length
+        ? {
+            id: {
+              in: options.candidateIds,
             },
-            data: {
-              summary: nextSummary,
-              description: nextDescription,
-              tags: toPrismaTagsValue(nextTags, prisma) as any,
-              categoryId: nextCategoryId,
+          }
+        : {
+            status: 'published',
+            publishedSkillId: {
+              not: null,
+            },
+          };
+
+      const candidates = await prisma.ingestCandidate.findMany({
+        where,
+        orderBy: [{ updatedAt: 'desc' }, { discoveredAt: 'desc' }],
+        take: batchSize,
+        select: {
+          id: true,
+          status: true,
+          publishedSkillId: true,
+          publishedAt: true,
+          failureReason: true,
+          repoFullName: true,
+          repoUrl: true,
+          sourceUrl: true,
+          installCommand: true,
+          summary: true,
+          description: true,
+          tags: true,
+          stars: true,
+          licenseKey: true,
+          categoryId: true,
+        },
+      });
+
+      selectedCount = candidates.length;
+
+      for (const candidate of candidates) {
+        try {
+          const parsed = parseSkillLinkInput(
+            candidate.installCommand || candidate.sourceUrl || candidate.repoUrl
+          );
+          const skillOrConditions: Array<Record<string, string>> = [];
+          if (candidate.publishedSkillId) {
+            skillOrConditions.push({ id: candidate.publishedSkillId });
+          }
+          if (parsed?.storageValue) {
+            skillOrConditions.push({ fileName: parsed.storageValue });
+          }
+          if (candidate.sourceUrl) {
+            skillOrConditions.push({ fileName: candidate.sourceUrl });
+          }
+
+          if (!skillOrConditions.length) {
+            skippedCount += 1;
+            continue;
+          }
+
+          const skill = await prisma.skill.findFirst({
+            where: {
+              OR: skillOrConditions,
+              status: {
+                in: ['active', 'archived'],
+              },
+            },
+            select: {
+              id: true,
+              summary: true,
+              description: true,
+              tags: true,
+              categoryId: true,
             },
           });
-          refreshedCount += 1;
-        }
 
-        const candidatePatch: {
-          publishedSkillId?: string;
-          publishedAt?: Date;
-          failureReason?: string | null;
-        } = {};
-        if (!candidate.publishedSkillId || candidate.publishedSkillId !== skill.id) {
-          candidatePatch.publishedSkillId = skill.id;
-        }
-        if (!candidate.publishedAt) {
-          candidatePatch.publishedAt = new Date();
-        }
-        if (candidate.failureReason) {
-          candidatePatch.failureReason = null;
-        }
+          if (!skill) {
+            skippedCount += 1;
+            continue;
+          }
 
-        if (Object.keys(candidatePatch).length > 0) {
-          await prisma.ingestCandidate.update({
-            where: {
-              id: candidate.id,
-            },
-            data: candidatePatch,
-          });
+          const nextSummary = normalizeSummary(
+            candidate.summary || '',
+            `自动收录自 ${candidate.repoFullName}`
+          );
+          const nextDescription = (
+            candidate.description || buildCandidateDescriptionFallback(candidate)
+          ).slice(0, 4000);
+          const nextTags = uniqueStrings([...(candidate.tags || []), 'auto-ingest'], 24);
+          const nextCategoryId = candidate.categoryId || skill.categoryId || null;
+          const tagsChanged =
+            normalizeTagSetForCompare(skill.tags || []) !== normalizeTagSetForCompare(nextTags);
+          const shouldUpdateCategory = nextCategoryId !== skill.categoryId;
+
+          const needsRefresh =
+            (skill.summary || '') !== nextSummary ||
+            (skill.description || '') !== nextDescription ||
+            tagsChanged ||
+            shouldUpdateCategory;
+
+          if (!needsRefresh) {
+            skippedCount += 1;
+          } else {
+            await prisma.skill.update({
+              where: {
+                id: skill.id,
+              },
+              data: {
+                summary: nextSummary,
+                description: nextDescription,
+                tags: toPrismaTagsValue(nextTags, prisma) as any,
+                categoryId: nextCategoryId,
+              },
+            });
+            refreshedCount += 1;
+          }
+
+          const candidatePatch: {
+            publishedSkillId?: string;
+            publishedAt?: Date;
+            failureReason?: string | null;
+          } = {};
+          if (!candidate.publishedSkillId || candidate.publishedSkillId !== skill.id) {
+            candidatePatch.publishedSkillId = skill.id;
+          }
+          if (!candidate.publishedAt) {
+            candidatePatch.publishedAt = new Date();
+          }
+          if (candidate.failureReason) {
+            candidatePatch.failureReason = null;
+          }
+
+          if (Object.keys(candidatePatch).length > 0) {
+            await prisma.ingestCandidate.update({
+              where: {
+                id: candidate.id,
+              },
+              data: candidatePatch,
+            });
+          }
+        } catch {
+          failedCount += 1;
         }
-      } catch {
-        failedCount += 1;
       }
     }
 

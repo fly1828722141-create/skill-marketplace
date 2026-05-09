@@ -369,7 +369,7 @@ export default function IngestDashboardPage() {
 
   async function runRefreshPublishedNow() {
     const confirmed = window.confirm(
-      '将把候选池中的最新 summary/description 同步到已发布 Skill，是否继续？'
+      '将全量刷新已收录 Skill（自动收录来源）的介绍内容，是否继续？'
     );
     if (!confirmed) return;
 
@@ -379,7 +379,8 @@ export default function IngestDashboardPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          batchSize: 300,
+          batchSize: 2000,
+          fullRefresh: true,
         }),
       });
       const result = await response.json();
@@ -508,7 +509,7 @@ export default function IngestDashboardPage() {
               onClick={() => void runRefreshPublishedNow()}
               disabled={runningRefreshPublished}
             >
-              {runningRefreshPublished ? '刷新介绍中...' : '刷新已收录介绍'}
+              {runningRefreshPublished ? '全量刷新中...' : '全量刷新已收录介绍'}
             </button>
             <button
               type="button"
