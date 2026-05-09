@@ -133,15 +133,23 @@ export default function SkillDetailPage() {
       summary
     );
     const panels = buildCapabilityPanels({
+      title: skill?.title || '',
+      summary,
       categoryName,
       language: parsedMeta.language,
       tags: skill?.tags || [],
       installCommand,
       sourceUrl: parsedMeta.sourceUrl || sourceUrl || null,
+      repoFullName: parsedMeta.repoFullName,
+      stars: parsedMeta.stars,
+      forks: parsedMeta.forks,
+      license: parsedMeta.license,
+      installs: parsedMeta.installs,
     });
     const generatedDocBlocks = buildGeneratedCapabilityBlocks({
       title: skill?.title || '',
       summary,
+      categoryName,
       sourceUrl: parsedMeta.sourceUrl || sourceUrl || null,
       panels,
     });
@@ -1349,64 +1357,219 @@ function uniqueByNormalized(items: string[], max = 4): string[] {
   return result;
 }
 
+const CAPABILITY_STOP_WORDS = new Set([
+  'a',
+  'an',
+  'and',
+  'the',
+  'for',
+  'with',
+  'from',
+  'to',
+  'of',
+  'in',
+  'on',
+  'skill',
+  'skills',
+  'open',
+  'source',
+  'opensource',
+  'repo',
+  'repository',
+  'project',
+  'tool',
+  'tools',
+  'auto',
+  'ingest',
+  'auto-ingest',
+  'github',
+  '能力',
+  '功能',
+  '工具',
+  '开源',
+  '自动收录',
+  '未分类',
+]);
+
+type CapabilityDomain = 'dev' | 'data' | 'content' | 'ops' | 'product' | 'generic';
+
+function extractFocusTerms(options: {
+  title: string;
+  summary: string;
+  tags: string[];
+  categoryName: string;
+  language: string | null;
+}): string[] {
+  const sources = [
+    options.title,
+    options.summary,
+    options.categoryName,
+    options.language || '',
+    ...(options.tags || []),
+  ];
+  const fragments = sources.flatMap((item) =>
+    String(item || '')
+      .split(/[\s,，。！？!?:：;；/|()（）[\]【】<>《》]+/)
+      .map((part) => part.trim())
+      .filter(Boolean)
+  );
+
+  const tokens: string[] = [];
+  for (const fragment of fragments) {
+    const clean = fragment.replace(/^[`"'“”‘’#*_\-]+|[`"'“”‘’#*_\-]+$/g, '').trim();
+    if (!clean) continue;
+
+    const lower = clean.toLowerCase();
+    if (CAPABILITY_STOP_WORDS.has(lower)) continue;
+    if (lower.startsWith('auto-') || lower.startsWith('github')) continue;
+
+    const englishWord = /^[a-z0-9][a-z0-9+_.#-]{2,}$/i.test(clean);
+    const cjkWord = /^[\u4e00-\u9fff]{2,12}$/.test(clean);
+    if (!englishWord && !cjkWord) continue;
+
+    tokens.push(clean);
+  }
+
+  return uniqueByNormalized(tokens, 6);
+}
+
+function inferCapabilityDomain(searchable: string): CapabilityDomain {
+  if (
+    /(dev|code|coding|program|sdk|api|cli|git|test|lint|build|debug|开发|工程|编程|代码|测试)/i.test(
+      searchable
+    )
+  ) {
+    return 'dev';
+  }
+  if (/(data|sql|etl|analytics|analysis|dataset|ml|ai|模型|数据|分析|训练)/i.test(searchable)) {
+    return 'data';
+  }
+  if (/(doc|docs|knowledge|content|notion|文档|知识|写作|翻译|内容)/i.test(searchable)) {
+    return 'content';
+  }
+  if (/(ops|sre|infra|k8s|docker|monitor|deploy|运维|监控|部署|告警|自动化)/i.test(searchable)) {
+    return 'ops';
+  }
+  if (
+    /(product|workflow|agent|assistant|bot|ux|ui|运营|产品|流程|客服|营销|设计|增长)/i.test(
+      searchable
+    )
+  ) {
+    return 'product';
+  }
+  return 'generic';
+}
+
+function extractRepoLabel(sourceUrl: string | null, repoFullName: string | null, title: string): string {
+  const normalizedRepo = (repoFullName || '').trim();
+  if (normalizedRepo) return normalizedRepo;
+
+  if (sourceUrl && /^https?:\/\//i.test(sourceUrl)) {
+    try {
+      const parsed = new URL(sourceUrl);
+      if (/github\.com$/i.test(parsed.hostname)) {
+        const segments = parsed.pathname.split('/').filter(Boolean);
+        if (segments.length >= 2) {
+          return `${segments[0]}/${segments[1].replace(/\.git$/i, '')}`;
+        }
+      }
+      return parsed.hostname.replace(/^www\./i, '');
+    } catch {
+      return sourceUrl.replace(/^https?:\/\//i, '').split('/')[0] || title || '该 Skill';
+    }
+  }
+
+  return title || '该 Skill';
+}
+
 function buildCapabilityPanels(options: {
+  title: string;
+  summary: string;
   categoryName: string;
   language: string | null;
   tags: string[];
   installCommand: string;
   sourceUrl: string | null;
+  repoFullName: string | null;
+  stars: number | null;
+  forks: number | null;
+  license: string | null;
+  installs: number | null;
 }): {
   useCases: string[];
   audience: string[];
   quickStart: string[];
+  focusTerms: string[];
+  qualitySignals: string[];
 } {
-  const { categoryName, language, tags, installCommand, sourceUrl } = options;
-  const searchable = `${categoryName} ${(tags || []).join(' ')}`.toLowerCase();
+  const {
+    title,
+    summary,
+    categoryName,
+    language,
+    tags,
+    installCommand,
+    sourceUrl,
+    repoFullName,
+    stars,
+    forks,
+    license,
+    installs,
+  } = options;
+  const searchable = `${title} ${summary} ${categoryName} ${(tags || []).join(' ')} ${language || ''}`.toLowerCase();
+  const focusTerms = extractFocusTerms({
+    title,
+    summary,
+    tags,
+    categoryName,
+    language,
+  });
+  const focusPreview = focusTerms.slice(0, 3).join('、');
+  const repoLabel = extractRepoLabel(sourceUrl, repoFullName, title);
+  const domain = inferCapabilityDomain(searchable);
 
-  const docUseCases = [
-    '建立团队可复用的 Skill 清单和工作流模板。',
-    '在 Codex CLI / API 场景中快速找到可执行能力。',
-    '把常见操作标准化，减少重复沟通与手工步骤。',
-  ];
-  const devUseCases = [
-    '为研发任务提供可复用的自动化能力入口。',
-    '将项目中的常见操作沉淀为标准 Skill 流程。',
-    '降低新成员上手成本，统一执行方式。',
-  ];
-  const dataUseCases = [
-    '支持数据处理、分析与脚本自动化的协作场景。',
-    '将高频数据任务沉淀为可复用技能模块。',
-    '帮助团队快速复用成熟的数据实践。',
-  ];
-  const genericUseCases = [
-    '复用社区开源能力，减少从零搭建成本。',
-    '把高频任务沉淀为标准化执行步骤。',
-    '提升团队在真实业务中的交付效率。',
-  ];
+  const domainUseCaseMap: Record<CapabilityDomain, string> = {
+    dev: '可直接接入研发流程，用于编码、调试、重构或工程自动化协作。',
+    data: '适合数据清洗、分析建模、指标计算或报表生成等高频场景。',
+    content: '适合文档撰写、知识整理、内容生产与信息结构化处理。',
+    ops: '可用于部署发布、监控告警、排障巡检等运维自动化流程。',
+    product: '适合产品运营、流程编排、Agent 协同与业务自动化落地。',
+    generic: '可作为通用能力模块接入团队流程，降低重复劳动和沟通成本。',
+  };
+
+  const hotnessParts: string[] = [];
+  if (typeof stars === 'number') hotnessParts.push(`Stars ${formatNumber(stars)}`);
+  if (typeof forks === 'number') hotnessParts.push(`Forks ${formatNumber(forks)}`);
+  if (typeof installs === 'number') hotnessParts.push(`Installs ${formatNumber(installs)}`);
 
   const useCases = uniqueByNormalized(
-    searchable.includes('文档') ||
-      searchable.includes('办公') ||
-      searchable.includes('知识') ||
-      searchable.includes('内容')
-      ? docUseCases
-      : searchable.includes('开发') ||
-          searchable.includes('工程') ||
-          searchable.includes('code') ||
-          searchable.includes('dev')
-        ? devUseCases
-        : searchable.includes('数据') || searchable.includes('analytics') || searchable.includes('analysis')
-          ? dataUseCases
-          : genericUseCases
+    [
+      `${repoLabel} 可在 ${categoryName} 场景中作为可复用 Skill 能力模块。`,
+      focusPreview ? `围绕 ${focusPreview} 等关键词，能更快定位到可落地的执行路径。` : '',
+      domainUseCaseMap[domain],
+      hotnessParts.length ? `社区热度参考：${hotnessParts.join(' / ')}。` : '',
+      '建议先在小范围流程试点验证，再沉淀为团队默认工作流。',
+    ].filter(Boolean),
+    5
   );
+
+  const audienceHintMap: Record<CapabilityDomain, string> = {
+    dev: '希望把研发动作标准化的工程团队与技术负责人。',
+    data: '需要稳定复用数据流程的数据分析师与算法工程师。',
+    content: '重视知识沉淀与内容效率的运营、产品或文档团队。',
+    ops: '关注稳定性、效率与自动化闭环的运维/SRE 团队。',
+    product: '需要连接业务流程与 AI 能力的产品、运营与增长团队。',
+    generic: '希望把高频任务标准化、减少重复执行的协作团队。',
+  };
 
   const audience = uniqueByNormalized(
     [
-      language ? `${language} 技术栈相关开发者。` : '',
-      `${categoryName} 场景的一线使用者与平台维护者。`,
-      '希望快速接入并验证开源 Skill 的团队管理员。',
-      '需要把 AI 能力纳入日常工作流的业务同学。',
-    ].filter(Boolean)
+      language ? `${language} 技术栈相关开发者与使用者。` : '',
+      `${categoryName} 方向的一线执行者与平台维护者。`,
+      focusPreview ? `关注 ${focusPreview} 能力建设的团队成员。` : '',
+      audienceHintMap[domain],
+    ].filter(Boolean),
+    4
   );
 
   const shortCommand =
@@ -1414,17 +1577,32 @@ function buildCapabilityPanels(options: {
   const quickStart = uniqueByNormalized(
     [
       shortCommand ? `复制并执行安装命令：\`${shortCommand}\`` : '',
-      sourceUrl ? '先阅读源仓库 README，确认输入输出与依赖条件。' : '',
-      '在测试环境先验证效果，再推广到团队默认流程。',
-      '上线前确认许可证和安全边界是否符合组织规范。',
+      sourceUrl ? `先阅读 ${repoLabel} 的 README，确认输入输出与依赖条件。` : '',
+      focusPreview ? `优先从与 ${focusPreview} 相关的示例用例开始试跑。` : '',
+      '在测试环境验证效果，再逐步推广到团队默认流程。',
+      license ? `上线前确认开源协议（${license}）与组织合规要求。` : '上线前确认许可证和安全边界。',
     ].filter(Boolean),
     5
+  );
+
+  const qualitySignals = uniqueByNormalized(
+    [
+      repoLabel ? `源仓库：${repoLabel}` : '',
+      typeof installs === 'number' ? `skills.sh 安装量：${formatNumber(installs)}` : '',
+      typeof stars === 'number' ? `GitHub Stars：${formatNumber(stars)}` : '',
+      typeof forks === 'number' ? `GitHub Forks：${formatNumber(forks)}` : '',
+      language ? `主要语言：${language}` : '',
+      license ? `开源协议：${license}` : '',
+    ].filter(Boolean),
+    6
   );
 
   return {
     useCases,
     audience,
     quickStart,
+    focusTerms,
+    qualitySignals,
   };
 }
 
@@ -1443,9 +1621,24 @@ function blockTextLength(block: DocBlock): number {
 
 function shouldExpandCapabilityDoc(blocks: DocBlock[]): boolean {
   if (blocks.length === 0) return true;
-  const meaningfulCount = blocks.filter((block) => block.type !== 'divider').length;
+  const meaningfulBlocks = blocks.filter((block) => block.type !== 'divider');
+  const meaningfulCount = meaningfulBlocks.length;
   const totalTextLength = blocks.reduce((sum, block) => sum + blockTextLength(block), 0);
-  return meaningfulCount < 4 || totalTextLength < 320;
+  const paragraphTextLength = meaningfulBlocks
+    .filter((block): block is Extract<DocBlock, { type: 'paragraph' }> => block.type === 'paragraph')
+    .reduce((sum, block) => sum + block.text.trim().length, 0);
+  const hasStructuredBlocks = meaningfulBlocks.some(
+    (block) => block.type === 'heading' || block.type === 'list' || block.type === 'code'
+  );
+
+  if (hasStructuredBlocks && totalTextLength >= 160) {
+    return false;
+  }
+  if (paragraphTextLength >= 220) {
+    return false;
+  }
+
+  return meaningfulCount < 3 || totalTextLength < 140;
 }
 
 function mergeCapabilityDocBlocks(primary: DocBlock[], generated: DocBlock[]): DocBlock[] {
@@ -1464,15 +1657,30 @@ function mergeCapabilityDocBlocks(primary: DocBlock[], generated: DocBlock[]): D
 function buildGeneratedCapabilityBlocks(options: {
   title: string;
   summary: string;
+  categoryName: string;
   sourceUrl: string | null;
   panels: {
     useCases: string[];
     audience: string[];
     quickStart: string[];
+    focusTerms: string[];
+    qualitySignals: string[];
   };
 }): DocBlock[] {
-  const { title, summary, sourceUrl, panels } = options;
+  const { title, summary, categoryName, sourceUrl, panels } = options;
   const blocks: DocBlock[] = [];
+  const focusPreview = panels.focusTerms.slice(0, 3).join('、');
+  const qualityPreview = panels.qualitySignals.slice(0, 2).join('；');
+  const overviewText = [
+    summary,
+    !summary
+      ? `${title || '该 Skill'} 在 ${categoryName} 场景中可作为开源可复用能力，支持按需接入现有流程。`
+      : '',
+    focusPreview ? `当前识别到的核心能力关键词：${focusPreview}。` : '',
+    qualityPreview ? `仓库质量信号：${qualityPreview}。` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   blocks.push({
     type: 'heading',
@@ -1482,9 +1690,19 @@ function buildGeneratedCapabilityBlocks(options: {
   blocks.push({
     type: 'paragraph',
     text:
-      summary ||
+      overviewText ||
       `${title || '该 Skill'} 当前公开信息较少，以下为基于收录信息生成的能力导览，可先用于快速判断是否适配你的场景。`,
   });
+
+  if (panels.focusTerms.length) {
+    blocks.push({ type: 'heading', level: 2, text: '核心能力关键词' });
+    blocks.push({ type: 'list', ordered: false, items: panels.focusTerms });
+  }
+
+  if (panels.qualitySignals.length) {
+    blocks.push({ type: 'heading', level: 2, text: '仓库质量信号' });
+    blocks.push({ type: 'list', ordered: false, items: panels.qualitySignals });
+  }
 
   if (panels.useCases.length) {
     blocks.push({ type: 'heading', level: 2, text: '适用场景' });
@@ -1514,6 +1732,8 @@ function buildGeneratedCapabilityBlocks(options: {
 function extractCapabilityMetadata(rawDescription: string): {
   cleanedDescription: string;
   sourceUrl: string | null;
+  repoFullName: string | null;
+  installs: number | null;
   stars: number | null;
   forks: number | null;
   language: string | null;
@@ -1522,6 +1742,8 @@ function extractCapabilityMetadata(rawDescription: string): {
   const lines = rawDescription.replace(/\r\n/g, '\n').split('\n');
   const retainedLines: string[] = [];
   let sourceUrl: string | null = null;
+  let repoFullName: string | null = null;
+  let installs: number | null = null;
   let stars: number | null = null;
   let forks: number | null = null;
   let language: string | null = null;
@@ -1541,6 +1763,20 @@ function extractCapabilityMetadata(rawDescription: string): {
     );
     if (sourceMatch) {
       sourceUrl = sourceMatch[2];
+      continue;
+    }
+
+    const repoMatch = content.match(
+      /^(github\s*)?(repo(?:sitory)?|仓库)[:：]\s*([a-z0-9._-]+\/[a-z0-9._-]+)$/i
+    );
+    if (repoMatch) {
+      repoFullName = repoMatch[3];
+      continue;
+    }
+
+    const installsMatch = content.match(/^(skills\.?sh\s*)?(installs?|downloads?)[:：]\s*([\d,]+)/i);
+    if (installsMatch) {
+      installs = parseMetricNumber(installsMatch[3]);
       continue;
     }
 
@@ -1574,6 +1810,8 @@ function extractCapabilityMetadata(rawDescription: string): {
   return {
     cleanedDescription: retainedLines.join('\n').replace(/\n{3,}/g, '\n\n').trim(),
     sourceUrl,
+    repoFullName,
+    installs,
     stars,
     forks,
     language,
