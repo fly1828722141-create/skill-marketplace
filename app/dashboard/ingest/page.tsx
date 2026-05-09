@@ -369,7 +369,7 @@ export default function IngestDashboardPage() {
 
   async function runRefreshPublishedNow() {
     const confirmed = window.confirm(
-      '将全量刷新已收录 Skill（自动收录来源）的介绍内容，是否继续？'
+      '将全量扫描并刷新站内 Skill 介绍（优先同步自动收录候选信息），是否继续？'
     );
     if (!confirmed) return;
 

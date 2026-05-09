@@ -1721,49 +1721,11 @@ export async function runRefreshPublishedSkills(
     let failedCount = 0;
 
     if (fullRefresh) {
-      const ingestAdmin = await ensureIngestAdminUser();
       const skills = await prisma.skill.findMany({
         where: {
           status: {
             in: ['active', 'archived'],
           },
-          OR: [
-            {
-              AND: [
-                {
-                  authorId: ingestAdmin.id,
-                },
-                {
-                  fileType: 'link',
-                },
-              ],
-            },
-            {
-              tags: {
-                has: 'auto-ingest',
-              },
-            },
-            {
-              summary: {
-                contains: '自动收录',
-              },
-            },
-            {
-              description: {
-                contains: '自动收录来源',
-              },
-            },
-            {
-              fileName: {
-                startsWith: 'npx skills add ',
-              },
-            },
-            {
-              fileName: {
-                startsWith: 'https://github.com/',
-              },
-            },
-          ],
         },
         orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
         take: batchSize,
@@ -1895,28 +1857,37 @@ export async function runRefreshPublishedSkills(
             (installKey ? candidateByInstall.get(installKey) : undefined) ||
             (skill.fileName ? candidateBySourceUrl.get(skill.fileName) : undefined);
 
-          const repoFullName =
-            candidate?.repoFullName ||
-            extractRepoFullNameFromUrl(candidate?.repoUrl || candidate?.sourceUrl || sourceUrl) ||
-            skill.title ||
-            'auto-ingest-skill';
-          const fallbackRepoUrl =
-            candidate?.repoUrl || candidate?.sourceUrl || sourceUrl || String(skill.fileName || '');
-          const nextSummary = normalizeSummary(
-            candidate?.summary || skill.summary || '',
-            `自动收录自 ${repoFullName}`
-          );
-          const nextDescription = (
-            candidate?.description ||
-            skill.description ||
-            buildCandidateDescriptionFallback({
-              repoUrl: fallbackRepoUrl || 'https://github.com',
-              summary: candidate?.summary || skill.summary || null,
-              stars: Number(candidate?.stars || 0),
-              licenseKey: candidate?.licenseKey || null,
-            })
-          ).slice(0, 4000);
-          const nextTags = uniqueStrings([...(candidate?.tags || skill.tags || []), 'auto-ingest'], 24);
+          const nextSummary = candidate
+            ? normalizeSummary(
+                candidate.summary || skill.summary || '',
+                `自动收录自 ${
+                  candidate.repoFullName ||
+                  extractRepoFullNameFromUrl(candidate.repoUrl || candidate.sourceUrl || sourceUrl) ||
+                  skill.title ||
+                  'auto-ingest-skill'
+                }`
+              )
+            : String(skill.summary || '');
+          const nextDescription = candidate
+            ? (
+                candidate.description ||
+                skill.description ||
+                buildCandidateDescriptionFallback({
+                  repoUrl:
+                    candidate.repoUrl ||
+                    candidate.sourceUrl ||
+                    sourceUrl ||
+                    String(skill.fileName || '') ||
+                    'https://github.com',
+                  summary: candidate.summary || skill.summary || null,
+                  stars: Number(candidate.stars || 0),
+                  licenseKey: candidate.licenseKey || null,
+                })
+              ).slice(0, 4000)
+            : String(skill.description || '');
+          const nextTags = candidate
+            ? uniqueStrings([...(candidate.tags || []), 'auto-ingest'], 24)
+            : uniqueStrings(skill.tags || [], 24);
           const nextCategoryId = candidate?.categoryId || skill.categoryId || null;
           const tagsChanged =
             normalizeTagSetForCompare(skill.tags || []) !== normalizeTagSetForCompare(nextTags);
