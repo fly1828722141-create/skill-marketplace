@@ -1721,12 +1721,23 @@ export async function runRefreshPublishedSkills(
     let failedCount = 0;
 
     if (fullRefresh) {
+      const ingestAdmin = await ensureIngestAdminUser();
       const skills = await prisma.skill.findMany({
         where: {
           status: {
             in: ['active', 'archived'],
           },
           OR: [
+            {
+              AND: [
+                {
+                  authorId: ingestAdmin.id,
+                },
+                {
+                  fileType: 'link',
+                },
+              ],
+            },
             {
               tags: {
                 has: 'auto-ingest',
@@ -1740,6 +1751,16 @@ export async function runRefreshPublishedSkills(
             {
               description: {
                 contains: '自动收录来源',
+              },
+            },
+            {
+              fileName: {
+                startsWith: 'npx skills add ',
+              },
+            },
+            {
+              fileName: {
+                startsWith: 'https://github.com/',
               },
             },
           ],
