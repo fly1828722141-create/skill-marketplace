@@ -157,6 +157,7 @@ export default function IngestDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [runningDiscover, setRunningDiscover] = useState(false);
   const [runningPublish, setRunningPublish] = useState(false);
+  const [runningRefreshPublished, setRunningRefreshPublished] = useState(false);
   const [runningRecategorize, setRunningRecategorize] = useState(false);
   const [reviewingId, setReviewingId] = useState('');
   const [candidates, setCandidates] = useState<IngestCandidate[]>([]);
@@ -366,6 +367,39 @@ export default function IngestDashboardPage() {
     }
   }
 
+  async function runRefreshPublishedNow() {
+    const confirmed = window.confirm(
+      '将把候选池中的最新 summary/description 同步到已发布 Skill，是否继续？'
+    );
+    if (!confirmed) return;
+
+    setRunningRefreshPublished(true);
+    try {
+      const response = await fetch('/api/ingest/refresh-published', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          batchSize: 300,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || '刷新已收录介绍失败');
+      }
+
+      const data = result.data || {};
+      message.success(
+        `刷新完成：处理 ${data.selectedCount ?? 0}，更新 ${data.refreshedCount ?? 0}，跳过 ${data.skippedCount ?? 0}，失败 ${data.failedCount ?? 0}`
+      );
+      await loadCandidates();
+    } catch (error: any) {
+      console.error('刷新已收录介绍失败:', error);
+      message.error(error?.message || '刷新已收录介绍失败');
+    } finally {
+      setRunningRefreshPublished(false);
+    }
+  }
+
   async function runRecategorizeNow() {
     setRunningRecategorize(true);
     try {
@@ -467,6 +501,14 @@ export default function IngestDashboardPage() {
               disabled={loading}
             >
               {loading ? '刷新中...' : '刷新候选池'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => void runRefreshPublishedNow()}
+              disabled={runningRefreshPublished}
+            >
+              {runningRefreshPublished ? '刷新介绍中...' : '刷新已收录介绍'}
             </button>
             <button
               type="button"

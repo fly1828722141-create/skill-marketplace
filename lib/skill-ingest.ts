@@ -73,6 +73,19 @@ export interface PublishResult {
   failedCount: number;
 }
 
+export interface RefreshPublishedSkillsOptions extends IngestRunContext {
+  batchSize?: number;
+  candidateIds?: string[];
+}
+
+export interface RefreshPublishedSkillsResult {
+  runId: string;
+  selectedCount: number;
+  refreshedCount: number;
+  skippedCount: number;
+  failedCount: number;
+}
+
 interface AutoDecision {
   allow: boolean;
   note: string;
@@ -909,7 +922,7 @@ async function requestGitHubRepo(fullName: string): Promise<GitHubRepo | null> {
 }
 
 async function createIngestRun(options: {
-  runType: 'discover' | 'publish';
+  runType: 'discover' | 'publish' | 'refresh';
   triggerType: string;
   triggerLabel: string;
   querySnapshot?: string;
@@ -1638,6 +1651,196 @@ async function publishSingleCandidate(options: {
     });
 
     return 'failed';
+  }
+}
+
+function normalizeTagSetForCompare(tags: string[]): string {
+  return uniqueStrings(tags || [], 128).sort().join('|');
+}
+
+export async function runRefreshPublishedSkills(
+  options: RefreshPublishedSkillsOptions
+): Promise<RefreshPublishedSkillsResult> {
+  const config = getSkillIngestConfig();
+  const batchSize = options.batchSize || Math.max(config.publishBatchSize, 100);
+
+  const run = await createIngestRun({
+    runType: 'refresh',
+    triggerType: options.triggerType,
+    triggerLabel: options.triggerLabel,
+    querySnapshot: JSON.stringify({
+      batchSize,
+      candidateIds: options.candidateIds || [],
+    }),
+  });
+
+  try {
+    const where: any = options.candidateIds?.length
+      ? {
+          id: {
+            in: options.candidateIds,
+          },
+        }
+      : {
+          status: 'published',
+          publishedSkillId: {
+            not: null,
+          },
+        };
+
+    const candidates = await prisma.ingestCandidate.findMany({
+      where,
+      orderBy: [{ updatedAt: 'desc' }, { discoveredAt: 'desc' }],
+      take: batchSize,
+      select: {
+        id: true,
+        status: true,
+        publishedSkillId: true,
+        publishedAt: true,
+        failureReason: true,
+        repoFullName: true,
+        repoUrl: true,
+        sourceUrl: true,
+        installCommand: true,
+        summary: true,
+        description: true,
+        tags: true,
+        stars: true,
+        licenseKey: true,
+        categoryId: true,
+      },
+    });
+
+    const selectedCount = candidates.length;
+    let refreshedCount = 0;
+    let skippedCount = 0;
+    let failedCount = 0;
+
+    for (const candidate of candidates) {
+      try {
+        const parsed = parseSkillLinkInput(
+          candidate.installCommand || candidate.sourceUrl || candidate.repoUrl
+        );
+        const skillOrConditions: Array<Record<string, string>> = [];
+        if (candidate.publishedSkillId) {
+          skillOrConditions.push({ id: candidate.publishedSkillId });
+        }
+        if (parsed?.storageValue) {
+          skillOrConditions.push({ fileName: parsed.storageValue });
+        }
+        if (candidate.sourceUrl) {
+          skillOrConditions.push({ fileName: candidate.sourceUrl });
+        }
+
+        if (!skillOrConditions.length) {
+          skippedCount += 1;
+          continue;
+        }
+
+        const skill = await prisma.skill.findFirst({
+          where: {
+            OR: skillOrConditions,
+            status: {
+              in: ['active', 'archived'],
+            },
+          },
+          select: {
+            id: true,
+            summary: true,
+            description: true,
+            tags: true,
+            categoryId: true,
+          },
+        });
+
+        if (!skill) {
+          skippedCount += 1;
+          continue;
+        }
+
+        const nextSummary = normalizeSummary(candidate.summary || '', `自动收录自 ${candidate.repoFullName}`);
+        const nextDescription = (
+          candidate.description || buildCandidateDescriptionFallback(candidate)
+        ).slice(0, 4000);
+        const nextTags = uniqueStrings([...(candidate.tags || []), 'auto-ingest'], 24);
+        const nextCategoryId = candidate.categoryId || skill.categoryId || null;
+        const tagsChanged =
+          normalizeTagSetForCompare(skill.tags || []) !== normalizeTagSetForCompare(nextTags);
+        const shouldUpdateCategory = nextCategoryId !== skill.categoryId;
+
+        const needsRefresh =
+          (skill.summary || '') !== nextSummary ||
+          (skill.description || '') !== nextDescription ||
+          tagsChanged ||
+          shouldUpdateCategory;
+
+        if (!needsRefresh) {
+          skippedCount += 1;
+        } else {
+          await prisma.skill.update({
+            where: {
+              id: skill.id,
+            },
+            data: {
+              summary: nextSummary,
+              description: nextDescription,
+              tags: toPrismaTagsValue(nextTags, prisma) as any,
+              categoryId: nextCategoryId,
+            },
+          });
+          refreshedCount += 1;
+        }
+
+        const candidatePatch: {
+          publishedSkillId?: string;
+          publishedAt?: Date;
+          failureReason?: string | null;
+        } = {};
+        if (!candidate.publishedSkillId || candidate.publishedSkillId !== skill.id) {
+          candidatePatch.publishedSkillId = skill.id;
+        }
+        if (!candidate.publishedAt) {
+          candidatePatch.publishedAt = new Date();
+        }
+        if (candidate.failureReason) {
+          candidatePatch.failureReason = null;
+        }
+
+        if (Object.keys(candidatePatch).length > 0) {
+          await prisma.ingestCandidate.update({
+            where: {
+              id: candidate.id,
+            },
+            data: candidatePatch,
+          });
+        }
+      } catch {
+        failedCount += 1;
+      }
+    }
+
+    await finishIngestRun(run.id, {
+      status: 'success',
+      selectedCount,
+      updatedCount: refreshedCount,
+      skippedCount,
+      failedCount,
+      message: `已处理 ${selectedCount}，刷新介绍 ${refreshedCount}`,
+    });
+
+    return {
+      runId: run.id,
+      selectedCount,
+      refreshedCount,
+      skippedCount,
+      failedCount,
+    };
+  } catch (error: any) {
+    await finishIngestRun(run.id, {
+      status: 'failed',
+      message: (error?.message || 'refresh failed').slice(0, 500),
+    });
+    throw error;
   }
 }
 
