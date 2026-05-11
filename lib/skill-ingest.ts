@@ -87,6 +87,22 @@ export interface RefreshPublishedSkillsResult {
   failedCount: number;
 }
 
+export interface RebuildIngestLibraryOptions extends IngestRunContext {
+  queries?: string[];
+  perQuery?: number;
+  maxPagesPerQuery?: number;
+  maxCandidates?: number;
+  runPublishWorker?: boolean;
+  publishBatchSize?: number;
+}
+
+export interface RebuildIngestLibraryResult {
+  archivedSkillCount: number;
+  clearedCandidateCount: number;
+  discover: DiscoveryResult;
+  publish: PublishResult | null;
+}
+
 interface AutoDecision {
   allow: boolean;
   note: string;
@@ -2445,4 +2461,121 @@ export async function runPublishWorker(options: PublishOptions): Promise<Publish
     });
     throw error;
   }
+}
+
+export async function runRebuildIngestLibrary(
+  options: RebuildIngestLibraryOptions
+): Promise<RebuildIngestLibraryResult> {
+  const admin = await ensureIngestAdminUser();
+
+  const candidateHints = await prisma.ingestCandidate.findMany({
+    select: {
+      publishedSkillId: true,
+      installCommand: true,
+      sourceUrl: true,
+      repoUrl: true,
+    },
+  });
+
+  const linkedSkillIds = uniqueRefreshKeys(candidateHints.map((item) => item.publishedSkillId), 10000);
+  const hintedFileNames = uniqueRefreshKeys(
+    candidateHints.flatMap((item) => {
+      const parsed = parseSkillLinkInput(item.installCommand || item.sourceUrl || item.repoUrl || '');
+      return [parsed?.storageValue, item.installCommand, item.sourceUrl, item.repoUrl];
+    }),
+    20000
+  );
+
+  const archiveOrConditions: any[] = [
+    {
+      AND: [
+        {
+          authorId: admin.id,
+        },
+        {
+          fileType: 'link',
+        },
+      ],
+    },
+    {
+      tags: {
+        has: 'auto-ingest',
+      },
+    },
+    {
+      summary: {
+        contains: '自动收录',
+      },
+    },
+    {
+      description: {
+        contains: '自动收录来源',
+      },
+    },
+    {
+      fileName: {
+        startsWith: 'npx skills add ',
+      },
+    },
+    {
+      fileName: {
+        startsWith: 'https://github.com/',
+      },
+    },
+  ];
+
+  if (linkedSkillIds.length > 0) {
+    archiveOrConditions.push({
+      id: {
+        in: linkedSkillIds,
+      },
+    });
+  }
+
+  if (hintedFileNames.length > 0) {
+    archiveOrConditions.push({
+      fileName: {
+        in: hintedFileNames,
+      },
+    });
+  }
+
+  const archived = await prisma.skill.updateMany({
+    where: {
+      status: {
+        in: ['active', 'archived'],
+      },
+      OR: archiveOrConditions,
+    },
+    data: {
+      status: 'deleted',
+    },
+  });
+
+  const cleared = await prisma.ingestCandidate.deleteMany({});
+
+  const discover = await runGitHubDiscovery({
+    triggerType: options.triggerType,
+    triggerLabel: `${options.triggerLabel}:rebuild`,
+    queries: options.queries,
+    perQuery: options.perQuery,
+    maxPagesPerQuery: options.maxPagesPerQuery,
+    maxCandidates: options.maxCandidates,
+  });
+
+  const publish =
+    options.runPublishWorker === false
+      ? null
+      : await runPublishWorker({
+          triggerType: options.triggerType,
+          triggerLabel: `${options.triggerLabel}:rebuild`,
+          batchSize: options.publishBatchSize,
+        });
+
+  return {
+    archivedSkillCount: archived.count,
+    clearedCandidateCount: cleared.count,
+    discover,
+    publish,
+  };
 }

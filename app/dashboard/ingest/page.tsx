@@ -158,6 +158,7 @@ export default function IngestDashboardPage() {
   const [runningDiscover, setRunningDiscover] = useState(false);
   const [runningPublish, setRunningPublish] = useState(false);
   const [runningRefreshPublished, setRunningRefreshPublished] = useState(false);
+  const [runningRebuild, setRunningRebuild] = useState(false);
   const [runningRecategorize, setRunningRecategorize] = useState(false);
   const [reviewingId, setReviewingId] = useState('');
   const [candidates, setCandidates] = useState<IngestCandidate[]>([]);
@@ -401,6 +402,47 @@ export default function IngestDashboardPage() {
     }
   }
 
+  async function runRebuildNow() {
+    const confirmed = window.confirm(
+      '将删除当前自动收录的历史结果并从 GitHub/外部来源重新发现发布，是否继续？'
+    );
+    if (!confirmed) return;
+
+    const secondConfirmed = window.confirm('高风险操作：确认执行“重建收录库”？');
+    if (!secondConfirmed) return;
+
+    setRunningRebuild(true);
+    try {
+      const response = await fetch('/api/ingest/rebuild', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          runPublishWorker: true,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || '重建收录库失败');
+      }
+
+      const data = result.data || {};
+      const discover = data.discover || {};
+      const publish = data.publish || {};
+
+      message.success(
+        `重建完成：清理 Skill ${data.archivedSkillCount ?? 0}，清空候选 ${data.clearedCandidateCount ?? 0}，发现新增 ${discover.insertedCount ?? 0}，发布 ${publish.publishedCount ?? 0}`
+      );
+
+      setPage(1);
+      await loadCandidates();
+    } catch (error: any) {
+      console.error('重建收录库失败:', error);
+      message.error(error?.message || '重建收录库失败');
+    } finally {
+      setRunningRebuild(false);
+    }
+  }
+
   async function runRecategorizeNow() {
     setRunningRecategorize(true);
     try {
@@ -510,6 +552,14 @@ export default function IngestDashboardPage() {
               disabled={runningRefreshPublished}
             >
               {runningRefreshPublished ? '全量刷新中...' : '全量刷新已收录介绍'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => void runRebuildNow()}
+              disabled={runningRebuild}
+            >
+              {runningRebuild ? '重建中...' : '重建收录库'}
             </button>
             <button
               type="button"
